@@ -34,7 +34,7 @@ function particle(x, y, dx, dy, life)
       local sb = math.sqrt(b)
 
       gfx.setstate({ colour={sb, b, b, b}, blend="add" })
-      gfx.sprite(star, self.x, self.y, .05)
+      gfx.sprite(star, self.x, self.y, 10)
    end
 
    return pt
