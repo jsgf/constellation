@@ -47,7 +47,9 @@ static bool warp = false;
 static bool paused = false;
 static bool capture = false;
 static bool autoconst = false;
+static bool record = false;
 
+static int screen_w, screen_h;
 
 static VaultOfHeaven heaven;
 
@@ -945,6 +947,39 @@ static void display(void)
 		   "Frame time: %3dms; %2d fps; %2d/%d active features", 
 		   delta, 1000 / framedelta, active, nFeatures);
 	
+	if (record) {
+		unsigned char *pix = new unsigned char [screen_w * screen_h * 3];
+		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+		glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+		glReadPixels(0, 0, screen_w, screen_h,
+			     GL_RGB, GL_UNSIGNED_BYTE,
+			     pix);
+
+		static FILE *recording = NULL;
+
+		if (recording == NULL) {
+			recording = fopen("record.ppm", "wb");
+
+			if (recording == NULL) 
+				perror("fopen failed");
+		}
+		
+		if (recording != NULL) {
+			int rows = screen_h & ~1; // even for mpeg
+
+			fprintf(recording, "P6\n%d %d 255\n", screen_w, rows);
+			int wb = screen_w * 3;
+
+			for (int r = rows - 1; r >= 0; r--)
+				fwrite(pix + (r * wb), wb, 1, recording);
+
+			fflush(recording);
+		}
+
+		delete[] pix;
+	}
+
 	glutSwapBuffers();
 }
 
@@ -973,6 +1008,10 @@ static void keyboard(unsigned char ch, int, int)
 
 	case 'n':
 		normalize = !normalize;
+		break;
+
+	case 'r':
+		record = !record;
 		break;
 
 	case 'h':
@@ -1047,6 +1086,9 @@ static void reshape(int w, int h)
 {
 	float img_asp  = (float)cam->imageWidth() / cam->imageHeight();
 	float screen_asp = (float)w / h;
+
+	screen_w = w;
+	screen_h = h;
 
 	if (0)
 		printf("img_asp=%g screen_asp=%g; screen=%dx%d; img=%dx%d\n",
