@@ -34,9 +34,9 @@ function process_frame(frame)
       local f = history[i]
 
       if f then
-	 local b = .5 / i
+	 local b = .3 / i
 	 gfx.setstate({blend='add', colour={b, b, b}})
-	 gfx.sprite(f, 320/2, 240/2, f.width * (1 + (i-1)*.4))
+	 gfx.sprite(320/2, 240/2, f.width * (1 + (i-1)*.4), f)
       end
    end
 
@@ -44,7 +44,7 @@ function process_frame(frame)
    for i in features do
       if type(i) == 'number' then
 	 local x, y = features[i].x, features[i].y
-	 gfx.sprite(star, x, y, 24)
+	 gfx.sprite(x, y, 24, star)
       end
    end
 

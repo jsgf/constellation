@@ -5,6 +5,8 @@ require("bokstd")
 t=tracker.new(30, 50)		-- 30-50 features tracked
 
 star = gfx.texture('star.png')
+butterfly = gfx.texture('atlantis.png')
+blob = gfx.texture('blob.png')
 
 -- Function to construct a new tracked feature point
 function trackpoint(x, y, w)
@@ -22,7 +24,7 @@ function trackpoint(x, y, w)
       local size = (math.sin(phase) + 1) * logw*2 + 10
       phase = phase + step
 
-      gfx.sprite(star, self.x, self.y, size)
+      gfx.sprite(self.x, self.y, size, star)
    end
 
    -- We could also define "move" and "lost" functions here, if we

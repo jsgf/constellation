@@ -71,5 +71,5 @@ end
 
 function drawframe(frame)
    gfx.setstate({colour={}, blend='none'})
-   gfx.sprite(frame, frame.width/2, frame.height/2)
+   gfx.sprite(frame.width/2, frame.height/2, nil, frame)
 end

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 
 extern "C" {
 #include <lua.h>
@@ -40,6 +41,7 @@ static unsigned char *img;
 static unsigned img_w, img_h;
 
 static bool ext_texture_rect;
+static int  max_texture_units;
 
 /* ----------------------------------------------------------------------
    Tracker interface
@@ -324,7 +326,7 @@ struct texture {
 	int height;
 	int texwidth, texheight;
 
-	float sw, sh;		// scale
+	float tc[2*4];		// texture coord array
 
 	GLenum format;		// texture format
 	GLenum target;		// texture target
@@ -378,6 +380,21 @@ static unsigned power2(unsigned x)
 	return ret;
 }
 
+static void init_tex_tc(struct texture *tex, float w, float h)
+{
+	tex->tc[0*2+0] = 0;
+	tex->tc[0*2+1] = 0;
+
+	tex->tc[1*2+0] = w;
+	tex->tc[1*2+1] = 0;
+
+	tex->tc[2*2+0] = w;
+	tex->tc[2*2+1] = h;
+
+	tex->tc[3*2+0] = 0;
+	tex->tc[3*2+1] = h;
+}
+
 static int texture_new_frame(lua_State *L,
 			     const unsigned char *img, 
 			     int width, int height,
@@ -401,8 +418,7 @@ static int texture_new_frame(lua_State *L,
 
 		// scale factor for 0..1 texture coords
 		// texture_rect textures have non-parametric coords
-		tex->sw = width;
-		tex->sh = height;
+		init_tex_tc(tex, width, height);
 
 		tex->target = GL_TEXTURE_RECTANGLE;
 
@@ -410,8 +426,9 @@ static int texture_new_frame(lua_State *L,
 		tex->texwidth = power2(width);
 		tex->texheight = power2(height);
 
-		tex->sw = (float)width / tex->texwidth;
-		tex->sh = (float)height / tex->texheight;
+		init_tex_tc(tex, 
+			    (float)width / tex->texwidth,
+			    (float)height / tex->texheight);
 
 		tex->target = GL_TEXTURE_2D;
 	}
@@ -481,8 +498,7 @@ static int texture_new_png(lua_State *L)
 	}
 
 	end_info = png_create_info_struct(png_ptr);
-	if (!end_info)
-	{
+	if (!end_info) {
 		error = "failed to allocate end png_info";
 		goto out;
 	}
@@ -561,8 +577,9 @@ static int texture_new_png(lua_State *L)
 		tex->texheight = texheight;
 		tex->target = GL_TEXTURE_2D;
 
-		tex->sw = (float)width / texwidth;
-		tex->sh = (float)height / texheight;
+		init_tex_tc(tex, 
+			    (float)width / tex->texwidth,
+			    (float)height / tex->texheight);
 
 		luaL_getmetatable(L, "texture");
 		lua_setmetatable(L, -2);
@@ -623,105 +640,147 @@ static const luaL_reg texture_meta[] = {
 static int gfx_point(lua_State *L)
 {
 	int narg = lua_gettop(L);
-	float x, y;
+	int npoints = narg / 2;
 
-	if (narg < 2) {
+	if (npoints < 1) {
 		lua_pushstring(L, "need at least (x,y)");
 		lua_error(L);
 	}
-	x = lua_tonumber(L, 1);
-	y = lua_tonumber(L, 2);
 
 	glBegin(GL_POINTS);
-	glVertex2f(x, y);
+
+	for(int pt = 0; pt < npoints; pt++) {
+		float x = lua_tonumber(L, (pt*2+0)+1);
+		float y = lua_tonumber(L, (pt*2+1)+1);
+		glVertex2f(x, y);
+	}
+
 	glEnd();
 
 	return 0;
 }
 
-// args: texture x y size|{width,height}
-// where size is the size of the longest edge
+// args: x y nil|size|{width,height} texture [texture...]
+//
+// Where size is the size of the longest edge; a nil or zero size
+// displays the full-sized texture.  The first texture is the base
+// texture, which is used for the size/position calculations.  The
+// other textures are multiplied in using multitexturing.
+
 static int gfx_sprite(lua_State *L)
 {
-	struct texture *tex;
 	float x, y, width, height;
-	float dx, dy;
+	int narg = lua_gettop(L);
+	int ntex = 0;
 
-	if (!lua_isuserdata(L, 1)) {
-		lua_pushstring(L, "need texture");
+	if (narg < 4) {
+		lua_pushstring(L, "sprite(x, y, nil|size|{width, height}, texture, [texture...])");
 		lua_error(L);
 	}
+
+	x = lua_tonumber(L, 1);
+	y = lua_tonumber(L, 2);
+
+	for(int i = 4; i <= narg; i++)
+		if (lua_isuserdata(L, i))
+			ntex++;
+
+	if (ntex == 0) {
+		lua_pushstring(L, "need at least one texture");
+		lua_error(L);
+	}
+
+	if (ntex > max_texture_units)
+		ntex = max_texture_units;
 	
-	tex = (struct texture *)lua_touserdata(L, 1);
+	struct texture *t[ntex];
 
-	if (tex->width == 0 || tex->height == 0) {
+	{
+		int idx = 0;
+		for(int i = 4; i <= narg; i++)
+			if (lua_isuserdata(L, i))
+				t[idx++] = (struct texture *)lua_touserdata(L, i);
+		assert(idx == ntex);
+	}
+
+	if (t[0]->width == 0 || t[0]->height == 0) {
 		lua_pushfstring(L, "bad %dx%d texture", 
-				tex->width, tex->height);
+				t[0]->width, t[0]->height);
 		lua_error(L);
 	}
 
-	x = lua_tonumber(L, 2);
-	y = lua_tonumber(L, 3);
+	width = t[0]->width;
+	height = t[0]->height;
 
-	width = tex->width;
-	height = tex->height;
+	// Get either a size number or a {width,height} table
+	if (lua_isnumber(L, 3)) {
+		float size = lua_tonumber(L, 3);
 
-	if (lua_isnumber(L, 4)) {
-		float size = lua_tonumber(L, 4);
-
-		if (tex->width > tex->height) {
+		if (t[0]->width > t[0]->height) {
 			width = size;
-			height = (tex->height * size) / tex->width;
+			height = (t[0]->height * size) / t[0]->width;
 		} else {
 			height = size;
-			width = (tex->width * size) / tex->height;
+			width = (t[0]->width * size) / t[0]->height;
 		}
-	} else if (lua_istable(L, 4)) {
+	} else if (lua_istable(L, 3)) {
 		lua_pushnumber(L, 1);
-		lua_gettable(L, 4);
+		lua_gettable(L, 3);
 		width = lua_tonumber(L, -1);
 
 		lua_pushnumber(L, 2);
-		lua_gettable(L, 4);
+		lua_gettable(L, 3);
 		height = lua_tonumber(L, -1);
 		
 		lua_pop(L, 2);
 	}
 
-	dx = width / 2;
-	dy = height / 2;
-
-	glBindTexture(tex->target, tex->texid);
-	glEnable(tex->target);
-
-	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
 
-	glMatrixMode(GL_TEXTURE);
-	glLoadIdentity();
-	glMatrixMode(GL_MODELVIEW);
+	glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT);
+	glPushClientAttrib(GL_CLIENT_VERTEX_ARRAY_BIT);
 
-	if (0)
-		printf("id=%d x=%g,y=%g dx=%g dy=%g sw=%g sh=%g\n",
-		       tex->texid, x, y, dx, dy, tex->sw, tex->sh);
-	
-	glBegin(GL_QUADS);
-	glTexCoord2f(0, 0);
-	glVertex2f(x - dx, y - dy);
+	for(int i = 0; i < ntex; i++) {
+		glClientActiveTexture(GL_TEXTURE0 + i);
+		glActiveTexture(GL_TEXTURE0 + i);
 
-	glTexCoord2f(tex->sw, 0);
-	glVertex2f(x + dx, y - dy);
+		glMatrixMode(GL_TEXTURE);
+		glLoadIdentity();
+		glMatrixMode(GL_MODELVIEW);
 
-	glTexCoord2f(tex->sw, tex->sh);
-	glVertex2f(x + dx, y + dy);
+		glBindTexture(t[i]->target, t[i]->texid);
+		glEnable(t[i]->target);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glTexCoordPointer(2, GL_FLOAT, 0, &t[i]->tc[0]);
 
-	glTexCoord2f(0, tex->sh);
-	glVertex2f(x - dx, y + dy);
-	glEnd();
+		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+		if (0)
+			printf("%d: id=%d x=%g,y=%g sw=%d sh=%d\n",
+			       i, t[i]->texid, x, y, 
+			       t[i]->width, t[i]->height);
+	}
+
+	static const float v[2*4] = { -.5, -.5,
+				       .5, -.5,
+				       .5,  .5,
+				      -.5,  .5 };
+
+	glPushMatrix();
+	glTranslatef(x, y, 0);
+	glScalef(width, height, 1);
+
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glVertexPointer(2, GL_FLOAT, 0, v);
+
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+	glPopMatrix();
+	glPopClientAttrib();
+	glPopAttrib();
 
 	GLERR();
 
-	glDisable(tex->target);
 	return 0;
 }
 
@@ -867,6 +926,10 @@ void lua_setup(const char *src)
 				  glGetString(GL_EXTENSIONS)) ||
 		gluCheckExtension((GLubyte *)"GL_NV_texture_rectangle",
 				  glGetString(GL_EXTENSIONS));
+	GLERR();
+
+	glGetIntegerv(GL_MAX_TEXTURE_UNITS, &max_texture_units);
+	GLERR();
 
 	ret = luaL_loadfile(L, src);
 	if (ret) {

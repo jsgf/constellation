@@ -35,7 +35,7 @@ gcc_FLAGS:=-Wall
 icc_FLAGS:= -wd1418,981,810,279,530,383,191,1469
 
 gcc_DEBUG:=-ggdb -fno-inline -O
-gcc_OPT:=-ggdb -O2 -msse -mfpmath=sse -march=athlon64
+gcc_OPT:=-ggdb -O2 -msse -mfpmath=sse -march=pentium-m
 
 pcc_OPT:=-O3 -LNO:simd_verbose=ON -LNO:simd=2 -LNO:prefetch=2 #-fb_opt fbdata #  -g -fno-inline
 #pcc_OPT:=-Ofast -LNO:prefetch=2
@@ -78,7 +78,7 @@ BOKLIBS = \
 	$(PNG_LIBS) \
 	-lGLU -lGL -lz -ldc1394_control -lraw1394 -lm
 
-all: constellation bokchoi
+all: bokchoi
 
 TESTPAT=tcf_sydney.o Indian_Head_320.o nbc-320.o
 
