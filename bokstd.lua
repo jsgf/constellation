@@ -69,3 +69,7 @@ function clamp(n, min, max)
    return n
 end
 
+function drawframe(frame)
+   gfx.setstate({colour={}, blend='none'})
+   gfx.sprite(frame, frame.width/2, frame.height/2)
+end

@@ -27,6 +27,11 @@ static void _glerr(const char *file, int line)
 	}
 }
 
+static unsigned char *img;
+static unsigned img_w, img_h;
+
+static bool ext_texture_rect;
+
 /* ----------------------------------------------------------------------
    Tracker interface
    ---------------------------------------------------------------------- */
@@ -40,9 +45,6 @@ struct tracker
 	int min, max;
 	int active;
 };
-
-extern unsigned char *img;
-extern unsigned int img_w, img_h;
 
 // Update feature set with tracking results
 // Args: tracker feature_set
@@ -315,7 +317,8 @@ struct texture {
 
 	float sw, sh;		// scale
 
-	GLenum format;
+	GLenum format;		// texture format
+	GLenum target;		// texture target
 };
 
 static int texture_index(lua_State *L)
@@ -366,9 +369,66 @@ static unsigned power2(unsigned x)
 	return ret;
 }
 
+static int texture_new_frame(lua_State *L,
+			     const unsigned char *img, 
+			     int width, int height,
+			     GLenum fmt)
+{
+	struct texture *tex;
+
+	tex = (struct texture *)lua_newuserdata(L, sizeof(*tex));
+	tex->width = width;
+	tex->height = height;
+	tex->format = fmt;
+
+	glGenTextures(1, &tex->texid);
+
+	luaL_getmetatable(L, "texture");
+	lua_setmetatable(L, -2);
+
+	if (ext_texture_rect) {
+		tex->texwidth = width;
+		tex->texheight = height;
+
+		// scale factor for 0..1 texture coords
+		// texture_rect textures have non-parametric coords
+		tex->sw = width;
+		tex->sh = height;
+
+		tex->target = GL_TEXTURE_RECTANGLE_ARB;
+
+	} else {
+		tex->texwidth = power2(width);
+		tex->texheight = power2(height);
+
+		tex->sw = (float)width / tex->texwidth;
+		tex->sh = (float)height / tex->texheight;
+
+		tex->target = GL_TEXTURE_2D;
+	}
+
+	glBindTexture(tex->target, tex->texid);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+	glTexImage2D(tex->target, 0, fmt, 
+		     tex->texwidth, tex->texheight, 0,
+		     fmt, GL_UNSIGNED_BYTE, img);
+	
+	glTexParameteri(tex->target, GL_TEXTURE_WRAP_S,
+			GL_CLAMP_TO_EDGE);
+	glTexParameteri(tex->target, GL_TEXTURE_WRAP_T,
+			GL_CLAMP_TO_EDGE);
+	glTexParameteri(tex->target, GL_TEXTURE_MAG_FILTER,
+			GL_LINEAR);
+	glTexParameteri(tex->target, GL_TEXTURE_MIN_FILTER,
+			GL_LINEAR);
+
+	GLERR();
+}
+
 // Create a texture userdata object.
 // Args: filename
-static int texture_new(lua_State *L)
+static int texture_new_png(lua_State *L)
 {
 	const char *filename;
 	FILE *fp;
@@ -436,7 +496,7 @@ static int texture_new(lua_State *L)
 	png_get_IHDR(png_ptr, info_ptr, &width, &height,
 		     &bitdepth, &color_type, NULL, NULL, NULL);
 
-	printf("width=%d height=%d bitdepth=%d color_type=%d\n",
+	printf("width=%u height=%u bitdepth=%d color_type=%d\n",
 	       width, height, bitdepth, color_type);
 
 	switch(color_type) {
@@ -490,6 +550,7 @@ static int texture_new(lua_State *L)
 		tex->format = fmt;
 		tex->texwidth = texwidth;
 		tex->texheight = texheight;
+		tex->target = GL_TEXTURE_2D;
 
 		tex->sw = (float)width / texwidth;
 		tex->sh = (float)height / texheight;
@@ -593,6 +654,9 @@ static int gfx_sprite(lua_State *L)
 	x = lua_tonumber(L, 2);
 	y = lua_tonumber(L, 3);
 
+	width = tex->width;
+	height = tex->height;
+
 	if (lua_isnumber(L, 4)) {
 		float size = lua_tonumber(L, 4);
 
@@ -613,17 +677,13 @@ static int gfx_sprite(lua_State *L)
 		height = lua_tonumber(L, -1);
 		
 		lua_pop(L, 2);
-	} else {
-		lua_pushstring(L, "expecting either number or {width,height} for size");
-		lua_error(L);
-		return 0;	// really noreturn
 	}
 
 	dx = width / 2;
 	dy = height / 2;
 
-	glBindTexture(GL_TEXTURE_2D, tex->texid);
-	glEnable(GL_TEXTURE_2D);
+	glBindTexture(tex->target, tex->texid);
+	glEnable(tex->target);
 
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
@@ -652,7 +712,7 @@ static int gfx_sprite(lua_State *L)
 
 	GLERR();
 
-	glDisable(GL_TEXTURE_2D);
+	glDisable(tex->target);
 	return 0;
 }
 
@@ -749,8 +809,8 @@ static const luaL_reg gfx_methods[] = {
 	{ "setstate",	gfx_setstate },
 //	{ "getstate",	gfx_getstate },
 
-	// texture constructor
-	{ "texture",	texture_new },
+	// texture constructor from PNG
+	{ "texture",	texture_new_png },
 
 	{0,0}
 };
@@ -791,6 +851,9 @@ void lua_setup(const char *src)
 	tracker_register(state);
 	gfx_register(state);
 
+	ext_texture_rect = gluCheckExtension((GLubyte *)"GL_EXT_texture_rectangle",
+					     glGetString(GL_EXTENSIONS));
+
 	ret = luaL_loadfile(L, src);
 	if (ret) {
 		const char *str = lua_tostring(L, -1);
@@ -821,13 +884,17 @@ void lua_cleanup()
 	lua_close(state);
 }
 
-void lua_frame()
+void lua_frame(const unsigned char *img, int img_w, int img_h)
 {
 	// call process_frame, if any
 	lua_pushstring(state, "process_frame");
 	lua_gettable(state, LUA_GLOBALSINDEX);
-	if (lua_isfunction(state, -1))
-		lua_call(state, 0, 0);
-	else
+	if (lua_isfunction(state, -1)) {
+		::img = (unsigned char *)img;
+		::img_w = img_w;
+		::img_h = img_h;
+		texture_new_frame(state, img, img_w, img_h, GL_LUMINANCE);
+		lua_call(state, 1, 0);
+	} else
 		lua_pop(state, 1);
 }

@@ -36,7 +36,9 @@ function features.add(self, idx, x, y, weight)
 end
 
 
-function process_frame()
+function process_frame(frame)
+   drawframe(frame)
+
    t:track(features)
 
    gfx.setstate({blend='add'})

@@ -29,30 +29,6 @@ static bool fullscreen = false;
 static bool finished = false;
 static bool paused = false;
 
-static GLuint imagetex;
-
-#define GLERR() _glerr(__FILE__, __LINE__);
-
-static void _glerr(const char *file, int line)
-{
-	GLenum err = glGetError();
-
-	if (err != GL_NO_ERROR) {
-		printf("GL error at %s:%d: %s\n",
-		       file, line, (char *)gluErrorString(err));
-	}
-}
-
-static int power2(unsigned x)
-{
-	unsigned ret = 1;
-
-	while(ret < x)
-		ret <<= 1;
-
-	return ret;
-}
-
 static struct vid_mode {
 	int w, h;
 } default_modes[] = {
@@ -309,72 +285,11 @@ static int newfile(const char *base, const char *ext)
 	return -1;
 }
 
-static void drawimage(const unsigned char *img)
-{
-	if (RUNNING_ON_VALGRIND)
-		return;
-
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-	glBindTexture(GL_TEXTURE_2D, imagetex);
-
-	// XXX do something if camera output is larger than max texture size
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 
-			cam->imageWidth(), cam->imageHeight(),
-			GL_LUMINANCE, GL_UNSIGNED_BYTE, img);
-
-	GLERR();
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	glMatrixMode(GL_TEXTURE);
-	glLoadIdentity();
-	glScalef(1.f / power2(cam->imageWidth()), 
-		 1.f / power2(cam->imageHeight()), 1);
-	glMatrixMode(GL_MODELVIEW);
-
-	glEnable(GL_TEXTURE_2D);
-	glDisable(GL_BLEND);
-
-
-	glShadeModel(GL_SMOOTH);
-	
-	// draw tinted image
-	glColor4f(1, 1, 1, 1);	
-	glColor4f(.75, .75, .75, 2);
-	
-	glBegin(GL_QUADS);
-	//glColor4f(.04, .07, .51, 1); // zenith
-	glTexCoord2i(0, 0);
-	glVertex2i(0, 0);
-
-	glTexCoord2i(cam->imageWidth(), 0);
-	glVertex2i(cam->imageWidth(), 0);
-
-	//glColor4f(0, .58, .99, 1); // horizon
-	glTexCoord2i(cam->imageWidth(), cam->imageHeight());
-	glVertex2i(cam->imageWidth(), cam->imageHeight());
-
-	glTexCoord2i(0, cam->imageHeight());
-	glVertex2i(0, cam->imageHeight());
-	glEnd();
-
-	GLERR();
-	glDisable(GL_TEXTURE_2D);
-
-	glPopMatrix();
-}
-
-// exports for Lua...
-const unsigned char *img;
-unsigned int img_w, img_h;
-
 static void display(void)
 {
+	static const unsigned char *img;
+	static unsigned int img_w, img_h;
+
 	if (!paused || img == NULL) {
 		img = cam->getFrame();
 		img_w = cam->imageWidth();
@@ -383,10 +298,8 @@ static void display(void)
 
 	glClearColor(.2, .2, .2, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
-
-	drawimage(img);
-
-	lua_frame();
+	
+	lua_frame(img, img_w, img_h);
 
 	SDL_GL_SwapBuffers();
 }
@@ -472,15 +385,6 @@ int main(int argc, char **argv)
 	GLint maxtex;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtex);
 	printf("max tex size %d\n", maxtex);
-
-	glGenTextures(1, &imagetex);
-	glBindTexture(GL_TEXTURE_2D, imagetex);
-	GLERR();
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE,
-		     power2(cam->imageWidth()), power2(cam->imageHeight()),
-		     0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
-	GLERR();
 
 	lua_setup(script);
 	atexit(lua_cleanup);

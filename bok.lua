@@ -1,3 +1,4 @@
+require('bokstd')
 
 fmt = string.format
 
@@ -46,13 +47,13 @@ function lostpoint(lostpt)
       x=lostpt.x, y=lostpt.y, 
       dx=lostpt.x-lostpt.px, 
       dy=lostpt.y-lostpt.py, 
-      age=0, scale=.5 }
+      age=0, size=20 }
 
    function pt.update (self)
       self.x = self.x + self.dx
       self.y = self.y + self.dy
 
-      self.scale = self.scale * 1.2
+      self.size = self.size * 1.2
       self.dx = self.dx * 1.2
       self.dy = self.dy * 1.2
 
@@ -66,7 +67,7 @@ function lostpoint(lostpt)
       local b = 1 - (self.age/10)
       --print("age=",self.age,"b=",b)
       gfx.setstate({colour={b,b,b,b}, blend="alpha"})
-      gfx.sprite(butterfly, self.x, self.y, self.scale)
+      gfx.sprite(butterfly, self.x, self.y, self.size)
    end
 
    particles[pt] = pt
@@ -84,7 +85,7 @@ function trackpoint(x, y, weight)
 	 gfx.setstate({colour={1,1,1,1}, blend="alpha"})
       end
 
-      gfx.sprite(butterfly, self.x, self.y, .5)
+      gfx.sprite(butterfly, self.x, self.y, 20)
    end
 
    function pt.move(self, x, y)
@@ -117,7 +118,9 @@ function features.add(self, idx, x, y, val)
    self[idx] = trackpoint(x, y, val)
 end
 
-function process_frame()
+function process_frame(frame)
+   drawframe(frame)
+
    t:track(features)
    if false then
       print("\n----------------------------------------");

@@ -27,9 +27,7 @@ end
 
 star = gfx.texture('star-la.png')
 blob = gfx.texture('blob.png')
-bscale = star.width / blob.width
 smoke = gfx.texture('smoke.png')
-sscale = star.width / smoke.width
 
 breeze=0
 
@@ -40,21 +38,21 @@ end
 smokers=0
 -- create a smoke particle
 function smokept(x, y, intens)
-   local pt = { x=x, y=y, intens=intens, age=0 }
+   local pt = { x=x, y=y, intens=intens, age=1 }
    local maxage = 100
 
    function pt.draw(self)
-      local minscale = 2
-      local scale = self.age / 10
+      local minsize = 2
+      local size = self.age * 3
       local b = (maxage-self.age) / (maxage*20)
       b = b * self.intens
-      if scale < minscale then
-	 b = b * (scale/minscale)
-	 scale = minscale
+      if size < minsize then
+	 b = b * (size/minsize)
+	 scale = minsize
       end
 
       gfx.setstate({colour={b, b, b, b}})
-      gfx.sprite(blob, self.x, self.y, scale)
+      gfx.sprite(blob, self.x, self.y, size)
    end
 
    function pt.update(self)
@@ -122,15 +120,15 @@ function trackpoint(x, y, weight)
    -- Drawing size and colour are functions of the particles oxygen.
    function pt.draw(self)
       local logO2 = math.log(self.o2)
-      local scale = logO2 / 50
+      local scale = logO2 * 2
       local temp = logO2 / 10
 
       temp = clamp(temp, 0, temp)
       
       -- if the scale is too small, then clamp, and a
       -- flickering ember effect
-      if scale < .05 then
-	 scale = .05
+      if scale < 5 then
+	 scale = 5
 	 temp = temp + (math.random() * .5)	-- add flicker
       end
 
@@ -138,7 +136,7 @@ function trackpoint(x, y, weight)
 
       -- set the colour depending on the temperature
       gfx.setstate({colour=gradient(incandescent, temp)})
-      gfx.sprite(blob, self.x, self.y, scale * bscale)
+      gfx.sprite(blob, self.x, self.y, scale)
    end
 
    -- Movement is simple; it just keeps track of the previous
@@ -220,7 +218,9 @@ function features.add(self, idx, x, y, weight)
    self[idx] = trackpoint(x, y, weight)
 end
 
-function process_frame()
+function process_frame(frame)
+   drawframe(frame)
+
    average={x=0, y=0}
    t:track(features)
    average={x=average.x / t.active, y=average.y / t.active}
