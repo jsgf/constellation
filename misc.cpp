@@ -136,7 +136,7 @@ GlyphCache::~GlyphCache()
 
 static GlyphCache *glyphcache[256];
 
-void drawString(float x, float y, Justify just, const char *fmt, ...)
+void drawString(float x, float y, float angle, Justify just, const char *fmt, ...)
 {
 	static bool init_done = false;
 	char buf[1000];
@@ -184,6 +184,21 @@ void drawString(float x, float y, Justify just, const char *fmt, ...)
 
 	width *= scalex;
 
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_TEXTURE_2D);
+
+	glMatrixMode(GL_TEXTURE);
+	glPushMatrix();
+	glLoadIdentity();
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+
+	glTranslatef(posx, posy, 0);
+	glRotatef(angle, 0, 0, 1);
+
+	posx = posy = 0;
+
 	switch(just) {
 	case JustLeft:
 		break;
@@ -196,15 +211,6 @@ void drawString(float x, float y, Justify just, const char *fmt, ...)
 		posx -= width / 2;
 		break;
 	}
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_TEXTURE_2D);
-
-	glMatrixMode(GL_TEXTURE);
-	glPushMatrix();
-	glLoadIdentity();
-	glMatrixMode(GL_MODELVIEW);
 
 	//posx = floorf(posx);
 	//posy = floorf(posy);
@@ -241,6 +247,7 @@ void drawString(float x, float y, Justify just, const char *fmt, ...)
 	glDisable(GL_BLEND);	
 	glDisable(GL_TEXTURE_2D);
 
+	glPopMatrix();
 	glMatrixMode(GL_TEXTURE);
 	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);

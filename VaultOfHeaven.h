@@ -36,6 +36,10 @@ class VaultOfHeaven {
 
 	static const unsigned minConst = 3;
 
+	typedef std::set<std::string> NameSet_t;
+
+	NameSet_t	used_names_;
+	
 	class Constellation {
 	public:
 		typedef unordered_pair<const Star *> StarPair_t;
@@ -46,7 +50,7 @@ class VaultOfHeaven {
 		
 		const std::string	&name_;
 
-		float		cx_, cy_; // caption position
+		float		cx_, cy_, ca_; // caption position
 
 	public:
 		Constellation(const std::string &name);
@@ -57,6 +61,8 @@ class VaultOfHeaven {
 		bool removeStar(const Star *);
 
 		unsigned size() const { return stars_.size(); }
+
+		const std::string &getName() const { return name_; }
 	};
 
 	typedef std::pair<const Star *, Constellation *> StarConst_t;

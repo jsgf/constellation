@@ -143,6 +143,10 @@ unsigned char *Camera::getFrame()
 		};
 		static unsigned char *tp = NULL;
 
+		size_ = SIF;	// probably won't work
+
+		stop();		// disable any use of camera
+
 		if (tp == NULL || (random() < (RAND_MAX / 1000)))
 			tp = tests[random() % (sizeof(tests)/sizeof(*tests))];
 
@@ -155,6 +159,7 @@ unsigned char *Camera::getFrame()
 		if (0)
 			printf("VIDIOCSYNC frame %u\n", mmap_nextframe_);
 		if (ioctl(fd_, VIDIOCSYNC, &mmap_nextframe_) == -1) {
+			failed_ = true;
 			perror("VIDIOSYNC failed");
 		}
 		ptr = frameptrs_[mmap_nextframe_];
@@ -177,7 +182,10 @@ unsigned char *Camera::getFrame()
 
 		return ptr;
 	} else {
-		read(fd_, buf_, imageSize());
+		int r = read(fd_, buf_, imageSize());
+
+		if (r != imageSize())
+			failed_ = true;
 		return buf_;
 	}
 }

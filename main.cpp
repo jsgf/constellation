@@ -48,7 +48,7 @@ static int markers = 1;		// show markers 0, 1, 2
 static bool warp = false;
 static bool paused = false;
 static bool capture = false;
-static bool autoconst = false;
+static bool autoconst = true;
 static gzFile recordfile = NULL;
 static bool fullscreen = false;
 static bool overlay = true;
@@ -506,7 +506,7 @@ static void drawborder()
 		glVertex2f(ox + 5 , oy - 5);
 		glEnd();
 
-		drawString(cx, cy-10, JustCentre,
+		drawString(cx, cy-10, 0, JustCentre,
 			   "(%.2f,%.2f)", features.off_x(), features.off_y());
 
 		GLERR();
@@ -548,6 +548,8 @@ void drawimage(const unsigned char *img, float deltax, float deltay)
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 	glBindTexture(GL_TEXTURE_2D, imagetex);
+
+	// XXX do something if camera output is larger than max texture size
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cam->imageWidth(), cam->imageHeight(),
 			GL_LUMINANCE, GL_UNSIGNED_BYTE, img);
 
@@ -652,8 +654,8 @@ static void drawhisto(const unsigned char *img, int pixcount)
 	glVertex2i(peak, 256);
 	glEnd();
 
-	drawString(peak+1, 1, JustLeft, "%d", peak);
-	drawString(2, 240, JustLeft, histo == 1 ? "Linear" : "Log");
+	drawString(peak+1, 1, 0, JustLeft, "%d", peak);
+	drawString(2, 240, 0, JustLeft, histo == 1 ? "Linear" : "Log");
 
 }
 
@@ -975,15 +977,15 @@ static void display(void)
 
 	if (overlay) {
 		glColor3f(1, 1, 0);
-		drawString(10, cam->imageHeight() - 12, JustLeft,
+		drawString(10, cam->imageHeight() - 12, 0, JustLeft,
 			   "Frame time: %3dms; %2d fps; %2d/%d active features", 
 			   delta, 1000 / framedelta, active, nFeatures);
 
-		drawString(10, 10, JustLeft, "%dx%d", screen_w, screen_h);
+		drawString(10, 10, 0, JustLeft, "%dx%d", screen_w, screen_h);
 
 		if (recordfile) {
 			glColor3f(1, 0, 0);
-			drawString(cam->imageWidth() - 12, 10, JustRight,
+			drawString(cam->imageWidth() - 12, 10, 0, JustRight,
 				   "Recording");
 		}
 	}
@@ -1143,6 +1145,7 @@ static void keyboard(SDL_keysym *sym)
 
 	case SDLK_e:
 		fullscreen = !fullscreen;
+
 		reshape(screen_w, screen_h);
 		break;
 
@@ -1341,6 +1344,10 @@ int main()
 	SDL_ShowCursor(0);
 
 	reshape(640, 480);
+
+	GLint maxtex;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtex);
+	printf("max tex size %d\n", maxtex);
 
 	glGenTextures(1, &imagetex);
 	glBindTexture(GL_TEXTURE_2D, imagetex);

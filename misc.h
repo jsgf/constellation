@@ -13,6 +13,6 @@ enum Justify {
 	JustCentre
 };
 
-void drawString(float x, float y, Justify j, const char *fmt, ...);
+void drawString(float x, float y, float angle, Justify j, const char *fmt, ...);
 
 #endif	/* MISC_H */

@@ -35,7 +35,7 @@ NameList::NameList(const string &filename)
 
 const string &NameList::getName()
 {
-	return names_[rand() % names_.size()];
+	return names_[random() % names_.size()];
 }
 
 VaultOfHeaven::VaultOfHeaven()
@@ -56,8 +56,10 @@ void VaultOfHeaven::clear()
 
 	for(ConstellationSet_t::iterator it = constellations_.begin();
 	    it != constellations_.end();
-	    it++)
+	    it++) {
+		used_names_.erase((*it)->getName());
 		delete(*it);
+	}
 
 	constellations_.clear();
 }
@@ -79,6 +81,7 @@ void VaultOfHeaven::removeConstellation(Constellation *c)
 			starmap_[it->first] = 0;
 
 	constellations_.erase(c);
+	used_names_.erase(c->getName());
 	delete c;
 }
 
@@ -119,11 +122,22 @@ bool VaultOfHeaven::addConstellation()
 	}
 
 	if (prev == NULL) {
-		printf("can't find a star to start with\n");
+		//printf("can't find a star to start with\n");
 		return false;
 	}
 
-	Constellation *c = new Constellation(namelist.getName());
+	Constellation *c;
+
+	for (;;) {
+		const string &name = namelist.getName();
+
+		if (used_names_.count(name))
+			continue;
+		used_names_.insert(name);
+
+		c = new Constellation(name);
+		break;
+	}
 
 	const Star *star = NULL;
 
@@ -203,6 +217,10 @@ void VaultOfHeaven::Constellation::draw()
 	cx = cy = 0;
 	count = 0;
 
+	float vx, vy;
+
+	vx = vy = 0;
+
 	for(StarPairSet_t::const_iterator it = stars_.begin();
 	    it != stars_.end();
 	    it++) {
@@ -212,6 +230,10 @@ void VaultOfHeaven::Constellation::draw()
 		cy += it->first->y();
 		cx += it->second->x();
 		cy += it->second->y();
+
+		vx += fabs(it->first->x() - it->second->x());
+		vy += (it->first->y() - it->second->y());
+
 		count += 2;
 
 		glVertex2f(it->first->x(), it->first->y());
@@ -225,21 +247,28 @@ void VaultOfHeaven::Constellation::draw()
 	cx /= count;
 	cy /= count;
 
+	float angle = (atan2f(vy, vx) * 360) / (2*M_PI);
+	angle = fmodf(angle, 180);
+
 	if (cx_ == 0 && cy_ == 0) {
 		// Zoom in from off-screen
 		// XXX get camera settings
 		cx_ = (cx - 160) * 5;
 		cy_ = (cy - 120) * 5;
+		ca_ = 0;
 	} else {
 		float dx = cx - cx_;
 		float dy = cy - cy_;
+		float da = angle - ca_;
 
 		static const float C = .1;
 		dx *= C;
 		dy *= C;
+		da *= C;
 
 		cx_ += dx;
 		cy_ += dy;
+		ca_ += da;
 	}
 
 	glColor3f(1, 1, 0);
@@ -251,7 +280,7 @@ void VaultOfHeaven::Constellation::draw()
 		glEnd();
 	}
 
-	drawString(cx_, cy_, JustCentre, name_.c_str());
+	drawString(cx_, cy_, ca_, JustCentre, name_.c_str());
 
 	glPopAttrib();
 }
