@@ -569,26 +569,58 @@ static int gfx_point(lua_State *L)
 	return 0;
 }
 
-// args: texture x y scale
+// args: texture x y size|{width,height}
+// where size is the size of the longest edge
 static int gfx_sprite(lua_State *L)
 {
 	struct texture *tex;
-	float x, y, scale;
+	float x, y, width, height;
 	float dx, dy;
 
 	if (!lua_isuserdata(L, 1)) {
 		lua_pushstring(L, "need texture");
 		lua_error(L);
 	}
-
+	
 	tex = (struct texture *)lua_touserdata(L, 1);
+
+	if (tex->width == 0 || tex->height == 0) {
+		lua_pushfstring(L, "bad %dx%d texture", 
+				tex->width, tex->height);
+		lua_error(L);
+	}
 
 	x = lua_tonumber(L, 2);
 	y = lua_tonumber(L, 3);
-	scale = lua_tonumber(L, 4);
 
-	dx = tex->width * scale / 2;
-	dy = tex->height * scale / 2;
+	if (lua_isnumber(L, 4)) {
+		float size = lua_tonumber(L, 4);
+
+		if (tex->width > tex->height) {
+			width = size;
+			height = (tex->height * size) / tex->width;
+		} else {
+			height = size;
+			width = (tex->width * size) / tex->height;
+		}
+	} else if (lua_istable(L, 4)) {
+		lua_pushnumber(L, 1);
+		lua_gettable(L, 4);
+		width = lua_tonumber(L, -1);
+
+		lua_pushnumber(L, 2);
+		lua_gettable(L, 4);
+		height = lua_tonumber(L, -1);
+		
+		lua_pop(L, 2);
+	} else {
+		lua_pushstring(L, "expecting either number or {width,height} for size");
+		lua_error(L);
+		return 0;	// really noreturn
+	}
+
+	dx = width / 2;
+	dy = height / 2;
 
 	glBindTexture(GL_TEXTURE_2D, tex->texid);
 	glEnable(GL_TEXTURE_2D);
@@ -761,16 +793,21 @@ void lua_setup(const char *src)
 
 	ret = luaL_loadfile(L, src);
 	if (ret) {
+		const char *str = lua_tostring(L, -1);
+
 		switch(ret) {
 		case LUA_ERRFILE:
-			fprintf(stderr, "file error loading %s\n", src);
+			fprintf(stderr, "file error: %s\n", 
+				str);
 			break;
 		case LUA_ERRSYNTAX:
-			fprintf(stderr, "syntax error loading %s\n", src);
+			fprintf(stderr, "syntax error: %s\n", 
+				str);
 			break;
 			
 		default:
-			fprintf(stderr, "error loading %s\n", src);
+			fprintf(stderr, "error loading %s: %s\n", 
+				src, str);
 			break;
 		}
 		exit(1);
