@@ -129,7 +129,7 @@ int V4LCamera::imageSize() const
 	return sizeinfo_[size_].width * (sizeinfo_[size_].height * 3 / 2);
 }
 
-void V4LCamera::start()
+bool V4LCamera::start()
 {
 	struct video_capability caps;
 	struct video_picture pict;
@@ -141,29 +141,29 @@ void V4LCamera::start()
 
 	if (fd_ == -1) {
 		perror("can't open camera");
-		return;
+		return false;
 	}
 
 	if (ioctl(fd_, VIDIOCGCAP, &caps) == -1) {
 		perror("VIDIOGCAP failed");
-		return;
+		return false;
 	}
 
 	if (ioctl(fd_, VIDIOCGPICT, &pict) == -1) {
 		perror("VIDIOGPICT failed");
-		return;
+		return false;
 	}
 
 	pict.palette = VIDEO_PALETTE_YUV420P; // XXX add converters
 
 	if (ioctl(fd_, VIDIOCSPICT, &pict) == -1) {
 		perror("VIDIOSPICT failed");
-		return;
+		return false;
 	}
 
 	if (ioctl(fd_, VIDIOCGWIN, &win) == -1) {
 		perror("VIDIOGWIN failed");
-		return;
+		return false;
 	}
 
 	win.width = sizeinfo_[size_].width;
@@ -173,7 +173,7 @@ void V4LCamera::start()
 
 	if (ioctl(fd_, VIDIOCSWIN, &win) == -1) {
 		perror("VIDIOSWIN failed");
-		return;
+		return false;
 	}
 
 	struct video_mbuf vidmbuf;
@@ -206,6 +206,8 @@ void V4LCamera::start()
 		buf_ = new unsigned char[imageSize()];
 
 	failed_ = false;
+
+	return isOK();
 }
 
 void V4LCamera::stop()
@@ -227,12 +229,16 @@ void V4LCamera::stop()
 	}
 }
 
+bool V4LCamera::isOK() const
+{
+	return !failed_;
+}
 
 const unsigned char *V4LCamera::getFrame()
 {
 	unsigned char *ret;
 
-	if (failed_)
+	if (!isOK())
 		return testpattern();
 
 	if (use_mmap_) {
@@ -280,13 +286,13 @@ FileCamera::FileCamera(const char *file)
 {
 }
 
-void FileCamera::start()
+bool FileCamera::start()
 {
 	fd_ = open(file_, O_RDONLY);
 
 	if (fd_ == -1) {
 		perror("FileCamera::start open");
-		return;
+		return false;
 	}
 
 	y4m_init_stream_info(&stream_);
@@ -295,7 +301,7 @@ void FileCamera::start()
 	if (err != Y4M_OK) {
 		printf("y4m_read_stream_header failed: %s\n", y4m_strerr(err));
 		stop();
-		return;
+		return false;
 	}
 
 	y4m_ratio_t framerate = y4m_si_get_framerate(&stream_);
@@ -310,7 +316,7 @@ void FileCamera::start()
 
 	if (i == FRAMESIZE_MAX) {
 		stop();
-		return;
+		return false;
 	}
 	size_ = (framesize_t)i;
 
@@ -318,6 +324,8 @@ void FileCamera::start()
 	       y4m_si_get_framelength(&stream_), imageSize());
 
 	buf_ = new unsigned char[y4m_si_get_framelength(&stream_)];
+
+	return isOK();
 }
 
 void FileCamera::stop()
@@ -338,9 +346,14 @@ int FileCamera::imageSize() const
 	return sizeinfo_[size_].width * (sizeinfo_[size_].height * 3 / 2);
 }
 
+bool FileCamera::isOK() const
+{
+	return buf_ != NULL && fd_ != -1;
+}
+
 const unsigned char *FileCamera::getFrame()
 {
-	if (buf_ == NULL || fd_ == -1)
+	if (!isOK())
 		return testpattern();
 
 	y4m_frame_info_t fi;

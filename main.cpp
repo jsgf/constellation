@@ -1000,14 +1000,19 @@ static void display(void)
 
 	if (recordfile) {
 		unsigned char *pix = new unsigned char [screen_w * screen_h * 3];
+		struct timeval start, end;
+
 		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 		glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
+		gettimeofday(&start, NULL);
 		glReadPixels(0, 0, screen_w, screen_h,
 			     GL_RGB, GL_UNSIGNED_BYTE,
 			     pix);
-
-		int rows = screen_h & ~1; // even for mpeg
+		gettimeofday(&end, NULL);
+		printf("glReadPixels took %u ms\n",
+		       (unsigned)((end.tv_sec*1000000ull+end.tv_usec)-(start.tv_sec*1000000ull+start.tv_usec)) / 1000);
+		int rows = screen_h & ~1; // even number of rows for mpeg
 		
 		char hdr[100];
 
@@ -1386,10 +1391,15 @@ int main(int argc, char **argv)
 		printf("opening %s...\n", argv[optind]);
 		cam = new FileCamera(argv[optind]);
 	} else {
-		if (0 && RUNNING_ON_VALGRIND)
-			cam = new V4LCamera(Camera::QSIF, 10);
-		else
-			cam = new DC1394Camera(Camera::SIF, 30);
+		Camera::framesize_t size = RUNNING_ON_VALGRIND ? Camera::QSIF : Camera::SIF;
+		int fps = RUNNING_ON_VALGRIND ? 15 : 30;
+
+		cam = new DC1394Camera(size, fps);
+		if (!cam->start()) {
+			delete cam;
+			cam = new V4LCamera(size, fps);
+			cam->start(); // will use test pattern if failed
+		}
 	} 
 
 	atexit(atexit_closerecord);
@@ -1401,7 +1411,6 @@ int main(int argc, char **argv)
 
 	atexit(SDL_Quit);
 
-	cam->start();
 	int rate = cam->getRate();
 
 	if (cam_record)
@@ -1410,7 +1419,16 @@ int main(int argc, char **argv)
 	SDL_WM_SetCaption("Constellation", "Constellation");
 	SDL_ShowCursor(0);
 
-	reshape(640, 480);
+	if (fullscreen) {
+		struct vid_mode *m = get_modes();
+		int idx;
+		for(idx = 0; m[idx].w != 0; idx++)
+			;
+		idx--;
+		reshape(m[idx].w, m[idx].h);
+		free_modes(m);
+	} else
+		reshape(640, 480);
 
 	GLint maxtex;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtex);

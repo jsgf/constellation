@@ -28,7 +28,9 @@ public:
 
 	int imageSize() const;
 	
-	void start();
+	bool isOK() const;
+
+	bool start();
 	void stop();
 
 	const unsigned char *getFrame();

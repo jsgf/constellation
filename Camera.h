@@ -47,8 +47,10 @@ class Camera
 
 	virtual const unsigned char *getFrame() = 0;
 
-	virtual void start() = 0;
+	virtual bool start() = 0;
 	virtual void stop() = 0;
+
+	virtual bool isOK() const = 0;
 
 	void startRecord(int fd);
 	void stopRecord();
@@ -70,7 +72,9 @@ class FileCamera : public Camera
 
 	int imageSize() const;
 
-	void start();
+	bool isOK() const;
+
+	bool start();
 	void stop();
 
 	const unsigned char *getFrame();
@@ -98,8 +102,9 @@ public:
 	~V4LCamera();
 
 	int imageSize() const;
+	bool isOK() const;
 
-	void start();
+	bool start();
 	void stop();
 
 	const unsigned char *getFrame();

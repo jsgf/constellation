@@ -4,8 +4,13 @@ static const int MAX_PORTS = 4;
 static const int DROP_FRAMES = 1;
 static const int NUM_BUFFERS = 8;
 
+static const Camera::framesize_t map[] = {
+	Camera::SIF, Camera::SIF, Camera::SIF, Camera::SIF,
+	Camera::VGA, Camera::VGA,
+};
+
 DC1394Camera::DC1394Camera(framesize_t size, int rate)
-	: Camera(size, rate), failed_(true),
+	: Camera(map[size], rate), failed_(true),
 	  camhandle_(NULL), buf_(NULL)
 {
 }
@@ -15,7 +20,7 @@ DC1394Camera::~DC1394Camera()
 	stop();
 }
 
-void DC1394Camera::start()
+bool DC1394Camera::start()
 {
 	// for now, only use the first discovered camera
 	struct raw1394_portinfo ports[MAX_PORTS];
@@ -27,7 +32,7 @@ void DC1394Camera::start()
 
 	if (raw_handle == NULL) {
 		perror("Can't get raw handle");
-		return;
+		return false;
 	}
 
 	int numPorts = raw1394_get_port_info(raw_handle, ports, MAX_PORTS);
@@ -35,7 +40,7 @@ void DC1394Camera::start()
 
 	if (numPorts == 0) {
 		fprintf(stderr, "No ieee1394 ports found\n");
-		return;
+		return false;
 	}
 
 	for(int p = 0; p < numPorts && camhandle_ == NULL; p++) {
@@ -122,6 +127,8 @@ void DC1394Camera::start()
 
 	if (!failed_)
 		buf_ = new unsigned char[imageSize()];
+
+	return isOK();
 }
 
 void DC1394Camera::stop()
@@ -140,9 +147,14 @@ void DC1394Camera::stop()
 	buf_ = NULL;
 }
 
+bool DC1394Camera::isOK() const
+{
+	return !failed_;
+}
+
 const unsigned char *DC1394Camera::getFrame()
 {
-	if (failed_)
+	if (!isOK())
 		return testpattern();
 
 	failed_ = dc1394_dma_single_capture(&camera_) != DC1394_SUCCESS;
