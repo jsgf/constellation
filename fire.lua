@@ -35,14 +35,17 @@ breeze=0
 function flamept()
 end
 
-smokers=0
+
+smokepop={}
+table.setn(smokepop, 500)	--max number of smoke particles
+
 -- create a smoke particle
 function smokept(x, y, intens)
    local pt = { x=x, y=y, intens=intens, age=1 }
    local maxage = 100
 
    function pt.draw(self)
-      local minsize = 2
+      local minsize = 20
       local size = self.age * 3
       local b = (maxage-self.age) / (maxage*20)
       b = b * self.intens
@@ -61,7 +64,6 @@ function smokept(x, y, intens)
       if self.age > maxage or
 	 self.intens < .2 or
 	 self.y < 0 then
-	 smokers = smokers-1
 	 del_particle(self)
       end
 
@@ -74,7 +76,11 @@ function smokept(x, y, intens)
    --register
    add_particle(pt, render_alpha)
 
-   smokers=smokers+1
+   if smokepop[1] then
+      del_particle(smokepop)
+      table.remove(smokepop, 1)
+   end
+   table.insert(smokepop, pr)
 end
 
 -- create floating spark
@@ -85,16 +91,16 @@ end
 function spitpt()
 end
 
---color transition; gimp "incandescent" gradient
+-- color transition; gimp "incandescent" gradient
 incandescent =  {
-   { .46, { .365, 0, 0 } },
-   { .59, { .73,  .01, 0 } },
-   { .676, { .863, .269, .097} },
+   { .46,  { .365,  0,    0   } },
+   { .59,  { .73,  .01,   0   } },
+   { .676, { .863, .269, .097 } },
    { .809, { 1,    .545, .196 } },
    { .853, { .986, .743, .135 } },
-   { .9, { .973, .938, .081 } },
+   { .9,   { .973, .938, .081 } },
    { .947, { .974, .953, .450 } },
-   { 1, { .976, .968, .822 } },
+   { 1,    { .976, .968, .822 } },
 }
 
 --[[
@@ -226,7 +232,6 @@ function process_frame(frame)
    average={x=average.x / t.active, y=average.y / t.active}
 
    --print(string.format('average=%g, %g', average.x, average.y))
-   print("smokers=",smokers)
    breeze = clamp(breeze + math.random() - .5, -5, 5)
 
    features:foreach('update')
