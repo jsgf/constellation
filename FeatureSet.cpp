@@ -1,6 +1,7 @@
 #include "FeatureSet.h"
 
 #include <cassert>
+#include <valgrind/memcheck.h>
 
 extern "C" {
 #include <klt.h>
@@ -59,6 +60,8 @@ void FeatureSet_Base::sync()
 		} else if ((f->val < 0) && (features_[i] != NULL)) {
 			removeFeature(features_[i]);
 			features_[i] = NULL;
+			VALGRIND_MAKE_WRITABLE(&f->x, sizeof(f->x));
+			VALGRIND_MAKE_WRITABLE(&f->y, sizeof(f->y));
 			active_--;
 		} else if ((f->val >= 0) && (features_[i] == NULL)) {
 			Feature *feature = newFeature(f->x, f->y, f->val);
