@@ -43,6 +43,6 @@ function process_frame(frame)
 
    t:track(features)
 
-   gfx.setstate({blend='add'})
+   gfx.setstate{blend='add'}
    features:foreach('draw')
 end

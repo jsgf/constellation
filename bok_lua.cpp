@@ -48,6 +48,41 @@ static bool ext_texture_rect;
 static int  max_texture_units;
 
 /* ----------------------------------------------------------------------
+   Useful
+   ---------------------------------------------------------------------- */
+// convert a relative stack reference to absolute
+int absidx(lua_State *L, int idx)
+{
+	if (idx < 0 && idx > LUA_REGISTRYINDEX)
+		idx = lua_gettop(L) + idx + 1;
+
+	return idx;
+}
+
+bool get_xy(lua_State *L, int idx, float *x, float *y)
+{
+	idx = absidx(L, idx);
+
+	if (!lua_istable(L, idx)) {
+		*x = *y = 0;
+		return false;
+	}
+
+	lua_pushliteral(L, "x");
+	lua_gettable(L, idx);
+	*x = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_pushliteral(L, "y");
+	lua_gettable(L, idx);
+	*y = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	return true;
+}
+
+
+/* ----------------------------------------------------------------------
    Tracker interface
    ---------------------------------------------------------------------- */
 
@@ -638,16 +673,18 @@ static const luaL_reg texture_meta[] = {
 static int gfx_line(lua_State *L)
 {
 	int narg = lua_gettop(L);
-	int nvert = narg / 2;
 
-	if (nvert < 2)
-		luaL_error(L, "need at least (x,y)(x,y)");
+	if (narg < 2)
+		luaL_error(L, "need at least two points");
 
 	glBegin(GL_LINE_STRIP);
 
-	for(int pt = 0; pt < nvert; pt++) {
-		float x = lua_tonumber(L, (pt*2+0)+1);
-		float y = lua_tonumber(L, (pt*2+1)+1);
+	for(int pt = 1; pt <= narg; pt++) {
+		float x, y;
+
+		if (!get_xy(L, pt, &x, &y))
+			continue;
+
 		glVertex2f(x, y);
 	}
 
@@ -659,16 +696,18 @@ static int gfx_line(lua_State *L)
 static int gfx_point(lua_State *L)
 {
 	int narg = lua_gettop(L);
-	int npoints = narg / 2;
 
-	if (npoints < 1)
-		luaL_error(L, "need at least (x,y)");
+	if (narg < 1)
+		luaL_error(L, "need at least one point");
 
 	glBegin(GL_POINTS);
 
-	for(int pt = 0; pt < npoints; pt++) {
-		float x = lua_tonumber(L, (pt*2+0)+1);
-		float y = lua_tonumber(L, (pt*2+1)+1);
+	for(int pt = 1; pt <= narg; pt++) {
+		float x, y;
+
+		if (!get_xy(L, pt, &x, &y))
+			continue;
+
 		glVertex2f(x, y);
 	}
 

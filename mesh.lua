@@ -1,6 +1,6 @@
 require('bokstd')
 
-t = tracker.new(90, 120)
+t = tracker.new(30, 50)
 
 m = mesh.new()
 
@@ -18,6 +18,11 @@ function features.add(self, idx, x, y, weight)
       gfx.sprite(self.x, self.y, 5, blob)
    end
 
+   function pt.move(self, x, y)
+      self.x,self.y = x,y
+      m:move(self)
+   end
+
    self[idx] = pt
    m:add(pt)
    --print('add pt.__mesh=',pt.__mesh)
@@ -28,15 +33,26 @@ function process_frame(frame)
 
    drawframe(frame)
 
-   gfx:setstate({colour={1,1,0,1}, blend='alpha'})
+   gfx.setstate{colour={1,1,0,1}, blend='alpha'}
    features:foreach('draw')
 
-   gfx:setstate({colour={}, blend='none'})
+   gfx.setstate{colour={}, blend='none'}
    for _,e in {m:edges()} do
-      --print('p=',p.x,p.y)
-      gfx.line(e[1].x,e[1].y, e[2].x,e[2].y)
+      local p1,p2 = e[1], e[2]
+      --print('p1=',p1.x,p1.y, 'p2=',p2.x,p2.y)
+
+      if e.age == nil then
+	 e.age = 20
+      end
+      local b = e.age / 20
+      gfx.setstate({colour={b,b,b}})
+      e.age = e.age - 1
+      if e.age < 0 then
+	 e.age = 0
+      end
+
+      gfx.line(p1, p2)
    end
-   --gfx.point(unpack(m:points()))
 end
 
    

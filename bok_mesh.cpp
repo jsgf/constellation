@@ -20,6 +20,8 @@
 //  add(self, pt)	-- add a point to the mesh
 //  del(self, pt)	-- remove a point from the mesh
 //
+//  move(self, pt)	-- pt has moved; update the mesh
+//
 //  points(self)	-- return a list of all points
 //
 //  adjacent(self, pt)  -- return a list of points connected to pt
@@ -55,6 +57,45 @@ struct mesh
 	GtsSurface *surface;
 };
 
+static void pushref(lua_State *L, int ref)
+{
+	lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+}
+
+// Decorate at table at idx with a lightuserdata pointer
+static void decorate(lua_State *L, int idx, void *userdata)
+{
+	idx = absidx(L, idx);
+
+	lua_pushliteral(L, "__mesh");
+	lua_pushlightuserdata(L, userdata);
+	lua_settable(L, idx);
+}
+
+static void undecorate(lua_State *L, int idx)
+{
+	if (lua_istable(L, idx)) {
+		idx = absidx(L, idx);
+
+		lua_pushliteral(L, "__mesh");
+		lua_pushnil(L);
+		lua_settable(L, idx);
+	}
+}
+
+static void *getdecoration(lua_State *L, int idx)
+{
+	void *ret;
+
+	idx = absidx(L, idx);
+	
+	lua_pushliteral(L, "__mesh");
+	lua_gettable(L, idx);
+	ret = lua_touserdata(L, -1);
+	lua_pop(L, 1);
+
+	return ret;
+}
 
 /****************************************
  BokVertex
@@ -94,10 +135,8 @@ static void bok_vertex_destroy (GtsObject * object)
 
 	if (L) {
 		// remove decoration
-		lua_rawgeti(L, LUA_REGISTRYINDEX, v->ref);
-		lua_pushliteral(L, "__mesh");
-		lua_pushnil(L);
-		lua_settable(L, -3);
+		pushref(L, v->ref);
+		undecorate(L, -1);
 		lua_pop(L, 1);
 
 		// drop reference
@@ -200,23 +239,21 @@ static void bok_edge_clone(GtsObject *clone, GtsObject *object)
 
 static void bok_edge_destroy (GtsObject * object)
 {
-	BokEdge *s = BOK_EDGE(object);
-	lua_State *L = s->L;
+	BokEdge *e = BOK_EDGE(object);
+	lua_State *L = e->L;
 
 	if (L) {
 		// remove decoration
-		lua_rawgeti(L, LUA_REGISTRYINDEX, s->ref);
-		lua_pushliteral(L, "__mesh");
-		lua_pushnil(L);
-		lua_settable(L, -3);
+		pushref(L, e->ref);
+		undecorate(L, -1);
 		lua_pop(L, 1);
 		
 		// drop reference
-		luaL_unref(s->L, LUA_REGISTRYINDEX, s->ref);
+		luaL_unref(L, LUA_REGISTRYINDEX, e->ref);
 	}
 
-	s->L = NULL;
-	s->ref = LUA_NOREF;
+	e->L = NULL;
+	e->ref = LUA_NOREF;
 
 	(* GTS_OBJECT_CLASS (bok_edge_class ())->parent_class->destroy) (object);
 }
@@ -263,26 +300,6 @@ BokEdge * bok_edge_new (GtsEdgeClass * klass)
 
 
 static int mesh_gc(lua_State *);
-
-static bool get_xy(lua_State *L, int idx, float *x, float *y)
-{
-	if (!lua_istable(L, idx)) {
-		*x = *y = 0;
-		return false;
-	}
-
-	lua_pushliteral(L, "x");
-	lua_gettable(L, idx);
-	*x = lua_tonumber(L, -1);
-	lua_pop(L, 1);
-
-	lua_pushliteral(L, "y");
-	lua_gettable(L, idx);
-	*y = lua_tonumber(L, -1);
-	lua_pop(L, 1);
-
-	return true;
-}
 
 static struct mesh *mesh_get(lua_State *L, int idx)
 {
@@ -390,9 +407,7 @@ static int mesh_add(lua_State *L)
 		}
 
 		// add/replace __mesh reference in point
-		lua_pushliteral(L, "__mesh");
-		lua_pushlightuserdata(L, v);
-		lua_settable(L, i);
+		decorate(L, i, v);
 
 		//gts_surface_print_stats(mesh->surface, stdout);
 	}
@@ -410,14 +425,15 @@ static int mesh_del(lua_State *L)
 	// look for each arg; we expect to find points with
 	// lightuserdata pointers to the corresponding BokVertex.
 	for(int i = 2; i <= narg; i++) {
+		void *d;
+
 		if (!lua_istable(L, i))
 			continue;
 
-		lua_pushliteral(L, "__mesh");
-		lua_gettable(L, i);
+		d = getdecoration(L, i);
 
-		if (lua_islightuserdata(L, -1)) {
-			GtsVertex *v = GTS_VERTEX(lua_touserdata(L, -1));
+		if (d && GTS_IS_VERTEX(d)) {
+			GtsVertex *v = GTS_VERTEX(d);
 			
 			if (v != NULL) {
 				if (0)
@@ -428,11 +444,8 @@ static int mesh_del(lua_State *L)
 				//gts_surface_print_stats(mesh->surface, stdout);
 			}
 		}
-		lua_pop(L, 1);
 
-		lua_pushliteral(L, "__mesh");
-		lua_pushnil(L);
-		lua_settable(L, i);
+		undecorate(L, i);
 	}
 	
 	return 0;
@@ -483,15 +496,13 @@ static void make_edge(lua_State *L, BokEdge *e, BokVertex *v1, BokVertex *v2)
 
 	lua_newtable(L);
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, v1->ref);
+	pushref(L, v1->ref);
 	lua_rawseti(L, -2, 1);
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, v2->ref);
+	pushref(L, v2->ref);
 	lua_rawseti(L, -2, 2);
 
-	lua_pushliteral(L, "__mesh");
-	lua_pushlightuserdata(L, e);
-	lua_settable(L, -3);
+	decorate(L, -1, e);
 
 	lua_pushvalue(L, -1);
 	e->ref = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -509,7 +520,7 @@ static gint foreach_edge_func(gpointer item, gpointer data)
 		lua_checkstack(L, edata->count+5);
 
 		if (e->ref != LUA_NOREF) {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, e->ref);
+			pushref(L, e->ref);
 			edata->count++;
 		} else 	if (IS_BOK_VERTEX(s->v1) && IS_BOK_VERTEX(s->v2)) {
 			e->L = edata->L;
@@ -530,15 +541,11 @@ static int mesh_edges(lua_State *L)
 	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
 
 	if (lua_istable(L, 2)) {
-		lua_pushliteral(L, "__mesh");
-		lua_gettable(L, 2);
+		void *d = getdecoration(L, 2);
 
-		if (lua_islightuserdata(L, -1)) {
+		if (d && GTS_IS_VERTEX(d)) {
 			// find edges attached to this point
-			GtsVertex *v = GTS_VERTEX(lua_touserdata(L, -1));
-			lua_pop(L, 1);
-
-			
+			GtsVertex *v = GTS_VERTEX(d);
 		}
 	} else {
 		// return everything
@@ -551,12 +558,92 @@ static int mesh_edges(lua_State *L)
 	return ret;
 }
 
+// taken from cdt.c; check that a face is still in a consistent triangulation
+static bool delaunay_check (GtsSurface *surface, GtsTriangle * t)
+{
+	GSList * i, * list;
+	GtsVertex * v1, * v2, * v3;
+	bool ret = true;
+
+	gts_triangle_vertices (t, &v1, &v2, &v3);
+	list = gts_vertex_neighbors (v1, NULL, surface);
+	list = gts_vertex_neighbors (v2, list, surface);
+	list = gts_vertex_neighbors (v3, list, surface);
+	i = list;
+	for (i = list; i; i = i->next) {
+		GtsVertex * v = GTS_VERTEX(i->data);
+		if (v != v1 && v != v2 && v != v3 &&
+		    gts_point_in_circle (GTS_POINT (v), 
+					 GTS_POINT (v1),
+					 GTS_POINT (v2),  
+					 GTS_POINT (v3)) > 0.) {
+			ret = false;
+			break;
+		}
+	}
+	g_slist_free (list);
+
+	return ret;
+}
+
+// Update the mesh if a point moves.
+//
+// XXX This is pretty useless; it will remove and replace the edges
+// even if the mesh topology is unchanged, which destroys any edge
+// annotations.  At the moment this looks to see if the moved point
+// violates the delaunay constraint, and if so removes it and re-adds
+// it.  This will remove and replace edges which end up being
+// unchanged.
+static int mesh_move(lua_State *L)
+{
+	struct mesh *mesh = mesh_get(L, 1);
+	void *d;
+	float x, y;
+
+	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
+	
+	d = getdecoration(L, 2);
+
+	luaL_argcheck(L, d != NULL && IS_BOK_VERTEX(d) && get_xy(L, 2, &x, &y),
+		      2, "vertex point expected");
+
+	BokVertex *v = BOK_VERTEX(d);
+	GtsPoint *p = GTS_POINT(v);
+
+	p->x = x;
+	p->y = y;
+
+	GSList *list = gts_vertex_faces(GTS_VERTEX(v), mesh->surface, NULL);
+
+	for(GSList *l = list; l != NULL; l = l->next) {
+		GtsFace *f = GTS_FACE(l->data);
+
+		// If moving the points breaks the delaunay property, then
+		// remove and reinsert it.
+		if (!delaunay_check(mesh->surface, GTS_TRIANGLE(f))) {
+			gts_allow_floating_vertices = TRUE;
+
+			gts_delaunay_remove_vertex(mesh->surface, GTS_VERTEX(v));
+			gts_delaunay_add_vertex(mesh->surface, GTS_VERTEX(v), NULL);
+
+			gts_allow_floating_vertices = FALSE;			
+			break;
+		}
+	}
+
+	g_slist_free(list);
+
+	return 0;
+}
+
 static const luaL_reg mesh_meta[] = {
 	{ "__gc",	mesh_gc },
 	{ "add",	mesh_add },
 	{ "del",	mesh_del },
 
 	{ "points",	mesh_points },
+
+	{ "move",	mesh_move },
 
 	{ "edges",	mesh_edges },
 
