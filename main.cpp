@@ -25,6 +25,7 @@
 #include "FeatureSet.h"
 #include "Feature.h"
 #include "Camera.h"
+#include "DC1394Camera.h"
 #include "Geom.h"
 #include "misc.h"
 
@@ -1388,7 +1389,7 @@ int main(int argc, char **argv)
 		if (0 && RUNNING_ON_VALGRIND)
 			cam = new V4LCamera(Camera::QSIF, 10);
 		else
-			cam = new V4LCamera(Camera::SIF, 30);
+			cam = new DC1394Camera(Camera::SIF, 30);
 	} 
 
 	atexit(atexit_closerecord);

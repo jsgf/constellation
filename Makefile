@@ -1,13 +1,13 @@
-CXX=g++ -ggdb
-LIBKLT=-lklt
-#CXX=icc -wd1418,981,810,279,530,383 # -ip -xB
-#LIBKLT=-lklt-icc
+#CXX=g++ -ggdb
+#LIBKLT=-lklt
+CXX=icc -wd1418,981,810,279,530,383,191,1469 # -ip -xB
+LIBKLT=-lklt-icc
 
 #PROF=-pg
 
-KLT=/home/jeremy/robot/src/klt
-CGAL=/home/jeremy/robot/src/CGAL-3.0.1
-CGALPLAT=i686_Linux-2.6.7-rc3-mm2_g++-3.3.3
+KLT=/home/jeremy/src/klt/klt
+CGAL=/home/jeremy/src/CGAL-3.0.1
+CGALPLAT=i686_Linux-2.6.7-mm7_g++-3.3.3
 
 FREETYPE_CFLAGS := $(shell freetype-config --cflags)
 FREETYPE_LIBS := $(shell freetype-config --libs)
@@ -23,9 +23,11 @@ all: constellation
 
 TESTPAT=tcf_sydney.o Indian_Head_320.o nbc-320.o
 
-constellation: main.o Camera.o FeatureSet.o Feature.o VaultOfHeaven.o misc.o \
+constellation: \
+	main.o Camera.o DC1394Camera.o \
+	FeatureSet.o Feature.o VaultOfHeaven.o misc.o \
 	star.o $(TESTPAT) # Geom.o
-	$(CXX)  $(PROF) -o $@ $^ -lSDL $(FREETYPE_LIBS) $(MJPEGTOOLS_LIBS) -lGLU -lGL -L$(KLT) $(LIBKLT) -L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL -lfftw3 -lz 
+	$(CXX)  $(PROF) -o $@ $^ -lSDL $(FREETYPE_LIBS) $(MJPEGTOOLS_LIBS) -lGLU -lGL -L$(KLT) $(LIBKLT) -L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL -lfftw3 -lz -ldc1394_control -lraw1394
 
 %.mpg: %.ppm.gz
 	zcat $< | ppmtoy4m | mpeg2enc -f 2 -q8 -o $@
