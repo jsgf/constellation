@@ -2,6 +2,8 @@
  * klt_util.c
  *********************************************************************/
 
+#define _XOPEN_SOURCE 600	/* posix_memalign */
+
 /* Standard includes */
 #include <assert.h>
 #include <stdlib.h>  /* malloc() */
@@ -37,7 +39,7 @@ _KLT_FloatImage _KLTCreateFloatImage(
     ncols * nrows * sizeof(float);
 
   /* make sure address is 16-byte aligned */
-  if (posix_memalign(&floatimg, 16, nbytes))
+  if (posix_memalign((void **)&floatimg, 16, nbytes))
     KLTError("(_KLTCreateFloatImage)  Out of memory");
   floatimg->ncols = ncols;
   floatimg->nrows = nrows;

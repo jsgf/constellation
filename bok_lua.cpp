@@ -454,6 +454,8 @@ static int texture_new_frame(lua_State *L,
 			GL_LINEAR);
 
 	GLERR();
+
+	return 1;
 }
 
 // Create a texture userdata object.
@@ -522,7 +524,7 @@ static int texture_new_png(lua_State *L)
 		     &bitdepth, &color_type, NULL, NULL, NULL);
 
 	printf("width=%u height=%u bitdepth=%d color_type=%d\n",
-	       width, height, bitdepth, color_type);
+	       (unsigned)width, (unsigned)height, bitdepth, color_type);
 
 	switch(color_type) {
 	case PNG_COLOR_TYPE_GRAY:
@@ -632,6 +634,27 @@ static const luaL_reg texture_meta[] = {
 
 	{0,0}
 };
+
+static int gfx_line(lua_State *L)
+{
+	int narg = lua_gettop(L);
+	int nvert = narg / 2;
+
+	if (nvert < 2)
+		luaL_error(L, "need at least (x,y)(x,y)");
+
+	glBegin(GL_LINE_STRIP);
+
+	for(int pt = 0; pt < nvert; pt++) {
+		float x = lua_tonumber(L, (pt*2+0)+1);
+		float y = lua_tonumber(L, (pt*2+1)+1);
+		glVertex2f(x, y);
+	}
+
+	glEnd();
+
+	return 0;
+}
 
 static int gfx_point(lua_State *L)
 {
@@ -854,6 +877,7 @@ static int gfx_setstate(lua_State *L)
 
 static const luaL_reg gfx_methods[] = {
 	// rendering operations
+	{ "line",	gfx_line },
 	{ "point",	gfx_point },
 	{ "sprite",	gfx_sprite },
 
