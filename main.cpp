@@ -72,7 +72,6 @@ static struct vid_mode {
 	{1024, 768 },
 	{0,0}
 };
-static struct vid_mode *modes = default_modes;
 
 static int newfile(const char *base, const char *ext)
 {
@@ -571,7 +570,7 @@ void drawimage(const unsigned char *img, float deltax, float deltay)
 	
 	glBegin(GL_QUADS);
 	if (markers == 1)
-		glColor4f(0, .58, .99, 0);
+		glColor4f(.04, .07, .51, 0); // zenith
 	glTexCoord2i(0, 0);
 	glVertex2i(0, 0);
 
@@ -579,13 +578,14 @@ void drawimage(const unsigned char *img, float deltax, float deltay)
 	glVertex2i(cam->imageWidth(), 0);
 
 	if (markers == 1)
-		glColor4f(.04, .07, .51, 0);
+		glColor4f(0, .58, .99, 0); // horizon
 	glTexCoord2i(cam->imageWidth(), cam->imageHeight());
 	glVertex2i(cam->imageWidth(), cam->imageHeight());
 
 	glTexCoord2i(0, cam->imageHeight());
 	glVertex2i(0, cam->imageHeight());
 	glEnd();
+
 	GLERR();
 	glDisable(GL_TEXTURE_2D);
 
@@ -936,12 +936,10 @@ static void display(void)
 	heaven.draw();
 
 	// more tracking
-	if (tracking) {
-		features.draw();
+	features.draw();
 
-		if (0)
-			printf("active = %d, limit=%d\n", active, nFeatures * 3 / 4);
-	}
+	if (0)
+		printf("active = %d, limit=%d\n", active, nFeatures * 3 / 4);
 
 	// display fft of image contents
 	if (fft)
@@ -1019,67 +1017,113 @@ static void display(void)
 	SDL_GL_SwapBuffers();
 }
 
-static void update_modes()
+static int cmp_mode(const struct vid_mode *a, const struct vid_mode *b)
+{
+#if 0
+	int aa = a->w*a->h;
+	int ab = b->w*b->h;
+
+	if (aa < ab)
+		return -1;
+	else if (aa > ab)
+		return 1;
+	return 0;
+#else
+	if (a->w == b->w)
+		return a->h - b->h;
+	else
+		return a->w - b->w;
+#endif
+}
+
+static struct vid_mode *get_modes()
 {
 	SDL_Rect **m = SDL_ListModes(NULL, SDL_HWSURFACE | (fullscreen ? SDL_FULLSCREEN : 0));
 
-
-	if (modes != default_modes)
-		delete[] modes;
-
-	if (m == NULL || m == (SDL_Rect **)-1) {
-		modes = default_modes;
-		return;
-	}
+	if (m == NULL || m == (SDL_Rect **)-1)
+		return default_modes;
 
 	int c;
 	for(c = 0; m[c]; c++)
 		;
-	modes = new vid_mode[c + 1];
+	struct vid_mode *modes = new vid_mode[c + 1];
 	for(int i = 0; i < c; i++) {
-		modes[i].w = m[c-i-1]->w;
-		modes[i].h = m[c-i-1]->h;
+		modes[i].w = m[i]->w;
+		modes[i].h = m[i]->h;
 	}
 	modes[c].w = modes[c].h = 0;
+
+	qsort(modes, c, sizeof(modes[0]), (int (*)(const void *, const void *))cmp_mode);
+
+	return modes;
 }
 
+static int mode_idx(const struct vid_mode *modes)
+{
+	int idx = 0;
+	struct vid_mode cur = { screen_w, screen_h };
+
+	for(idx = 0; modes[idx].w != 0; idx++)
+		;
+
+	idx--;
+
+	for(; idx > 0; idx--) {
+		//printf("modes[%d] = %dx%d\n", idx, modes[idx].w, modes[idx].h);
+		if (cmp_mode(&modes[idx], &cur) <= 0)
+			break;
+	}
+
+	//printf("idx %dx%d -> %d\n", screen_w, screen_h, idx);
+
+	return idx;
+}
+
+static void free_modes(struct vid_mode *modes)
+{
+	if (modes != default_modes)
+		delete[] modes;
+}
 
 static void keyboard(SDL_keysym *sym)
 {
 	bool shift = !!(sym->mod & KMOD_SHIFT);
 
 	switch(sym->sym) {
-	case SDLK_PLUS:
-	case SDLK_EQUALS:
+
 	case SDLK_MINUS:
+	case SDLK_EQUALS:
 	{
 		int idx;
 
-		update_modes();
+		struct vid_mode *modes = get_modes();
 
-		for(idx = 0; modes[idx].w != 0; idx++)
-			if (modes[idx].w == screen_w && 
-			    modes[idx].h == screen_h)
-				break;
-
-		if (modes[idx].w == 0)
-			idx--;
-
-
-		while(idx >= 0 && modes[idx].w != 0 && 
-		      modes[idx].w == screen_w &&
-		      modes[idx].h == screen_h) {
-			if (sym->sym == SDLK_PLUS ||
-			    sym->sym == SDLK_EQUALS)
-				idx++;
-			else
+		if (shift) {
+			if (sym->sym == SDLK_EQUALS) {
+				for(idx = 0; modes[idx].w != 0; idx++)
+					;
 				idx--;
-		}
+			} else
+				idx = 0;
+		} else {
+			idx = mode_idx(modes);
 
+			while(idx >= 0 && modes[idx].w != 0 && 
+			      modes[idx].w == screen_w &&
+			      modes[idx].h == screen_h) {
+				if (sym->sym == SDLK_EQUALS)
+					idx++;
+				else
+					idx--;
+			}
+			
+		}
 		if (idx < 0 || modes[idx].w == 0)
 			break;
-
 		reshape(modes[idx].w, modes[idx].h);
+
+		free_modes(modes);
+
 		break;
 	}
 
@@ -1263,12 +1307,25 @@ static void handle_events()
 	}
 }
 
+static unsigned long long get_now()
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+
+	return tv.tv_sec * 1000000ull + tv.tv_usec;
+}
+
 int main()
 {
+	int rate;
+
+	srandom(getpid());
+
 	if (0 && RUNNING_ON_VALGRIND)
-		cam = new Camera(Camera::QSIF, 10);
+		cam = new Camera(Camera::QSIF, rate = 10);
 	else
-		cam = new Camera(Camera::SIF, 30);
+		cam = new Camera(Camera::SIF, rate = 30);
 
 	atexit(atexit_closerecord);
 
@@ -1322,5 +1379,26 @@ int main()
 
 		if (autoconst && random() < (RAND_MAX/1000))
 			heaven.clear();
+
+		// Timing: 
+		// We want time_between_calls + sleep_here == (1/rate_)
+		// We can't control anything except sleep_here
+		static unsigned long long prev_time;
+		static long sleep_time = 1000000 / 30;
+		long want_time = 1000000 / rate;
+
+		if (prev_time != 0) {
+			unsigned long long frame_delta = get_now() - prev_time; // time since prev call
+			
+			long error = (frame_delta + sleep_time) - want_time;
+			
+			sleep_time -= error / 10;
+
+			if (sleep_time > 0)
+				usleep(sleep_time);
+			else
+				sleep_time = 0;	// clamp
+		}
+		prev_time = get_now();
 	}
 }

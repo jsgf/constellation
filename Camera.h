@@ -18,6 +18,8 @@ private:
 		int width, height;
 	} sizeinfo_[];
 
+	bool	failed_;
+
 	size_t	size_;
 	int	rate_;
 

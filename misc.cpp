@@ -81,6 +81,8 @@ GlyphCache::GlyphCache(unsigned char ch)
 {
 	FT_Error error;
 
+	//printf("adding '%c' to cache\n", ch);
+
 	glGenTextures(1, &texid);
 
 	FT_GlyphSlot slot = face->glyph;

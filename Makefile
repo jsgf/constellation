@@ -13,7 +13,7 @@ CXXFLAGS=-Wall -g -O -fno-inline $(PROF) -I$(KLT) -I$(CGAL)/include -I$(CGAL)/in
 
 all: constellation star.raw
 
-constellation: main.o Camera.o FeatureSet.o Feature.o VaultOfHeaven.o misc.o # Geom.o
+constellation: main.o Camera.o FeatureSet.o Feature.o VaultOfHeaven.o misc.o testpat.o # Geom.o
 	$(CXX)  $(PROF) -o $@ $^ -lSDL -lfreetype -lGLU -lGL -L$(KLT) $(LIBKLT) -L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL -lfftw3 -lz
 
 %.mpg: %.ppm.gz
@@ -24,6 +24,11 @@ constellation: main.o Camera.o FeatureSet.o Feature.o VaultOfHeaven.o misc.o # G
 
 star.raw: star.png
 	convert star.png -resize 64x64 gray:star.raw
+
+%.raw: %.jpg
+	convert -resize 320x240 $< gray:$@
+
+testpat.o: nbc-320.raw Indian_Head_320.raw tcf_sydney.raw
 
 %.o: %.cpp .deps
 	$(CXX) -c -o $@ -MD -MF .deps/$*.d $(CXXFLAGS) $<

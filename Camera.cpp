@@ -1,7 +1,10 @@
+#include <stdlib.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/time.h>
+#include <time.h>
 #include <sys/mman.h>
 
 #include <linux/videodev.h>
@@ -33,11 +36,13 @@ void Camera::start()
 	struct video_picture pict;
 	struct video_window win;
 
+	failed_ = true;
+
 	fd_ = open("/dev/video0", O_RDONLY);
 
 	if (fd_ == -1) {
 		perror("can't open camera");
-		return;		// XXX
+		return;
 	}
 
 	if (ioctl(fd_, VIDIOCGCAP, &caps) == -1) {
@@ -100,6 +105,8 @@ void Camera::start()
 		}
 	} else
 		buf_ = new unsigned char[imageSize()];
+
+	failed_ = false;
 }
 
 void Camera::stop()
@@ -127,6 +134,21 @@ int Camera::imageSize() const
 
 unsigned char *Camera::getFrame()
 {
+	if (failed_) {
+		extern unsigned char nbc_320[];
+		extern unsigned char Indian_Head[];
+		extern unsigned char tcf_sydney[];
+		static unsigned char *tests[] = {
+			nbc_320, Indian_Head, tcf_sydney,
+		};
+		static unsigned char *tp = NULL;
+
+		if (tp == NULL || (random() < (RAND_MAX / 1000)))
+			tp = tests[random() % (sizeof(tests)/sizeof(*tests))];
+
+		return tp;
+	}
+
 	if (use_mmap_) {
 		unsigned char *ptr;
 
