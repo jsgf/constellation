@@ -12,6 +12,15 @@ extern "C" {
 
 #include <png.h>
 #include <GL/glu.h>
+#include <GL/glext.h>
+
+#if GL_EXT_texture_rectangle
+#define GL_TEXTURE_RECTANGLE GL_TEXTURE_RECTANGLE_EXT
+#elif GL_ARB_texture_rectangle
+#define GL_TEXTURE_RECTANGLE GL_TEXTURE_RECTANGLE_ARB
+#else
+#define GL_TEXTURE_RECTANGLE 0
+#endif
 
 static lua_State *state;
 
@@ -386,7 +395,7 @@ static int texture_new_frame(lua_State *L,
 	luaL_getmetatable(L, "texture");
 	lua_setmetatable(L, -2);
 
-	if (ext_texture_rect) {
+	if (ext_texture_rect && GL_TEXTURE_RECTANGLE) {
 		tex->texwidth = width;
 		tex->texheight = height;
 
@@ -395,7 +404,7 @@ static int texture_new_frame(lua_State *L,
 		tex->sw = width;
 		tex->sh = height;
 
-		tex->target = GL_TEXTURE_RECTANGLE_ARB;
+		tex->target = GL_TEXTURE_RECTANGLE;
 
 	} else {
 		tex->texwidth = power2(width);
@@ -851,8 +860,13 @@ void lua_setup(const char *src)
 	tracker_register(state);
 	gfx_register(state);
 
-	ext_texture_rect = gluCheckExtension((GLubyte *)"GL_EXT_texture_rectangle",
-					     glGetString(GL_EXTENSIONS));
+	ext_texture_rect =
+		gluCheckExtension((GLubyte *)"GL_ARB_texture_rectangle",
+				  glGetString(GL_EXTENSIONS)) ||
+		gluCheckExtension((GLubyte *)"GL_EXT_texture_rectangle",
+				  glGetString(GL_EXTENSIONS)) ||
+		gluCheckExtension((GLubyte *)"GL_NV_texture_rectangle",
+				  glGetString(GL_EXTENSIONS));
 
 	ret = luaL_loadfile(L, src);
 	if (ret) {
