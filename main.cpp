@@ -1390,8 +1390,9 @@ int main(int argc, char **argv)
 	if (optind == argc-1) {
 		printf("opening %s...\n", argv[optind]);
 		cam = new FileCamera(argv[optind]);
+		cam->start();
 	} else {
-		Camera::framesize_t size = RUNNING_ON_VALGRIND ? Camera::QSIF : Camera::VGA;
+		Camera::framesize_t size = RUNNING_ON_VALGRIND ? Camera::QSIF : Camera::SIF;
 		int fps = RUNNING_ON_VALGRIND ? 15 : 30;
 
 		cam = new DC1394Camera(size, fps);
