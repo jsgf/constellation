@@ -13,7 +13,8 @@ FeatureSet_Base::FeatureSet_Base(int maxFeatures, int minFeatures)
 	KLTSetVerbosity(0);
 
 	klt_tc_->sequentialMode = true;
-	klt_tc_->mindist = 25;
+	//klt_tc_->mindist = 25;
+	klt_tc_->mindist = 15;
 	
 	setNumFeatures(minFeatures, maxFeatures);
 }
