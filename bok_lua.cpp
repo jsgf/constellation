@@ -12,6 +12,8 @@ extern "C" {
 }
 
 #include <png.h>
+
+#define GL_GLEXT_PROTOTYPES
 #include <GL/glu.h>
 #include <GL/glext.h>
 
@@ -45,32 +47,6 @@ static unsigned img_w, img_h;
 static bool ext_texture_rect;
 static int  max_texture_units;
 
-// Get a userdata object from the stack at the particular index.  If
-// the userdata object at that location doesn't have a metatable, or
-// the metadata table's __gc entry doesn't point to the provided gc
-// function, then fail.
-void *userdata_get(lua_State *L, int idx, lua_CFunction gc, const char *name)
-{
-	if (lua_isuserdata(L, idx) && lua_getmetatable(L, idx)) {
-		lua_CFunction meta_gc;
-
-		lua_pushliteral(L, "__gc");
-		lua_gettable(L, -2);
-		meta_gc = lua_tocfunction(L, -1);
-		lua_pop(L, 1);
-
-		if (meta_gc == gc) {
-			void *ret = lua_touserdata(L, idx);
-			if (ret != NULL)
-				return ret;
-		}
-	}		
-
-	luaL_error(L, "userdata type mismatch: expecting %s", name); // noreturn
-	return NULL;
-}
-
-
 /* ----------------------------------------------------------------------
    Tracker interface
    ---------------------------------------------------------------------- */
@@ -91,7 +67,7 @@ static struct tracker *tracker_get(lua_State *L, int idx)
 {
 	struct tracker *tracker;
 
-	tracker = (struct tracker *)userdata_get(L, idx, tracker_gc, "tracker");
+	tracker = (struct tracker *)luaL_checkudata(L, idx, "bokchoi.tracker");
 	return tracker;
 }
 
@@ -288,7 +264,7 @@ static int tracker_new(lua_State *L)
 	tc->max = max;
 	tc->active = 0;
 
-	luaL_getmetatable(L, "tracker");	// user meta
+	luaL_getmetatable(L, "bokchoi.tracker");	// user meta
 	if (!lua_istable(L, -1))
 		luaL_error(L, "missing tracker.__meta in registry");
 
@@ -320,7 +296,6 @@ static const luaL_reg tracker_methods[] = {
 static const luaL_reg tracker_meta[] = {
 	{ "__gc",	tracker_gc },
 	{ "__index",	tracker_index },
-
 	{ 0,0 }
 };
 
@@ -328,8 +303,11 @@ static int tracker_register(lua_State *L)
 {
 	luaL_openlib(L, "tracker", tracker_methods, 0);	// lib
 
-	luaL_newmetatable(L, "tracker");		// lib meta
-	luaL_openlib(L, 0, tracker_meta, 0);		// lib meta
+	luaL_newmetatable(L, "bokchoi.tracker");
+	lua_pushstring(L, "__index");
+	lua_pushvalue(L, -2);  /* pushes the metatable */
+
+	luaL_openlib(L, 0, tracker_meta, 0);
 
 	lua_pop(L, 2);
 	return 1;
@@ -356,7 +334,7 @@ static int texture_gc(lua_State *L);
 
 static struct texture *texture_get(lua_State *L, int idx)
 {
-	return (struct texture *)userdata_get(L, idx, texture_gc, "texture");
+	return (struct texture *)luaL_checkudata(L, idx, "bokchoi.texture");
 }
 
 static int texture_index(lua_State *L)
@@ -435,7 +413,7 @@ static int texture_new_frame(lua_State *L,
 
 	glGenTextures(1, &tex->texid);
 
-	luaL_getmetatable(L, "texture");
+	luaL_getmetatable(L, "bokchoi.texture");
 	lua_setmetatable(L, -2);
 
 	if (ext_texture_rect && GL_TEXTURE_RECTANGLE) {
@@ -603,7 +581,7 @@ static int texture_new_png(lua_State *L)
 			    (float)width / tex->texwidth,
 			    (float)height / tex->texheight);
 
-		luaL_getmetatable(L, "texture");
+		luaL_getmetatable(L, "bokchoi.texture");
 		lua_setmetatable(L, -2);
 
 		glBindTexture(GL_TEXTURE_2D, tex->texid);
@@ -893,7 +871,7 @@ static void gfx_register(lua_State *L)
 {
 	luaL_openlib(L, "gfx", gfx_methods, 0);
 
-	luaL_newmetatable(L, "texture");
+	luaL_newmetatable(L, "bokchoi.texture");
 	luaL_openlib(L, NULL, texture_meta, 0);
 }
 
