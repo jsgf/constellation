@@ -183,18 +183,20 @@ bool VaultOfHeaven::addConstellation()
 }
 
 VaultOfHeaven::Constellation::Constellation(const string &name)
-	: name_(name)
+	: name_(name), cx_(0), cy_(0)
 {
 }
 
-void VaultOfHeaven::Constellation::draw() const
+void VaultOfHeaven::Constellation::draw()
 {
 	float cx, cy;
 	int count;
 
 	glPushAttrib(GL_LINE_BIT);
 	glLineWidth(2);
-	glColor3f(.7, .7, .7);
+	glColor4f(.7, .7, .7, .7);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 	glBegin(GL_LINES);
 	
@@ -204,9 +206,13 @@ void VaultOfHeaven::Constellation::draw() const
 	for(StarPairSet_t::const_iterator it = stars_.begin();
 	    it != stars_.end();
 	    it++) {
+		// make sure we count both ends of each vertex, but
+		// weigh them twice
 		cx += it->first->x();
 		cy += it->first->y();
-		count++;
+		cx += it->second->x();
+		cy += it->second->y();
+		count += 2;
 
 		glVertex2f(it->first->x(), it->first->y());
 		glVertex2f(it->second->x(), it->second->y());
@@ -214,10 +220,38 @@ void VaultOfHeaven::Constellation::draw() const
 
 	glEnd();
 
+	glDisable(GL_BLEND);
+
 	cx /= count;
 	cy /= count;
+
+	if (cx_ == 0 && cy_ == 0) {
+		// Zoom in from off-screen
+		// XXX get camera settings
+		cx_ = (cx - 160) * 5;
+		cy_ = (cy - 120) * 5;
+	} else {
+		float dx = cx - cx_;
+		float dy = cy - cy_;
+
+		static const float C = .1;
+		dx *= C;
+		dy *= C;
+
+		cx_ += dx;
+		cy_ += dy;
+	}
+
 	glColor3f(1, 1, 0);
-	drawString(cx, cy, JustCentre, name_.c_str());
+
+	if (0) {
+		glBegin(GL_LINES);
+		glVertex2f(0,0);
+		glVertex2f(cx_,cy_);
+		glEnd();
+	}
+
+	drawString(cx_, cy_, JustCentre, name_.c_str());
 
 	glPopAttrib();
 }

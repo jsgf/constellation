@@ -46,10 +46,12 @@ class VaultOfHeaven {
 		
 		const std::string	&name_;
 
+		float		cx_, cy_; // caption position
+
 	public:
 		Constellation(const std::string &name);
 
-		void draw() const;
+		void draw();
 
 		void addStars(const Star *, const Star *);
 		bool removeStar(const Star *);
