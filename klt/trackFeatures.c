@@ -412,8 +412,9 @@ void KLTTrackFeatures(
   float xloc, yloc, xlocout, ylocout;
   int val;
   int indx, r;
-  KLT_BOOL floatimg1_created = FALSE;
   int i;
+
+  floatimg1 = NULL;
 
   if (KLT_verbose >= 1)  {
     fprintf(stderr,  "(KLT) Tracking %d features in a %d by %d image...  ",
@@ -459,7 +460,6 @@ void KLTTrackFeatures(
     assert(pyramid1_gradx != NULL);
     assert(pyramid1_grady != NULL);
   } else  {
-    floatimg1_created = TRUE;
     floatimg1 = _KLTCreateFloatImage(ncols, nrows);
     _KLTToFloatImage(img1, ncols, nrows, tmpimg);
     _KLTComputeSmoothedImage(tmpimg, _KLTComputeSmoothSigma(tc), floatimg1);
@@ -519,6 +519,8 @@ void KLTTrackFeatures(
         xloc /= subsampling;  yloc /= subsampling;
       }
       xlocout = xloc;  ylocout = yloc;
+
+      assert(tc->nPyramidLevels >= 1);
 
       /* Beginning with coarsest resolution, do ... */
       for (r = tc->nPyramidLevels - 1 ; r >= 0 ; r--)  {
@@ -584,7 +586,7 @@ void KLTTrackFeatures(
 
   /* Free memory */
   _KLTFreeFloatImage(tmpimg);
-  if (floatimg1_created)  _KLTFreeFloatImage(floatimg1);
+  if (floatimg1 != NULL)  _KLTFreeFloatImage(floatimg1);
   _KLTFreeFloatImage(floatimg2);
   _KLTFreePyramid(pyramid1);
   _KLTFreePyramid(pyramid1_gradx);
