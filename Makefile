@@ -20,16 +20,34 @@ KLTSRC:=convolve.c error.c pnmio.c pyramid.c selectGoodFeatures.c \
 	storeFeatures.c trackFeatures.c klt.c klt_util.c writeFeatures.c
 KLTOBJ:=$(addprefix klt/,$(KLTSRC:%.c=%.o))
 
+################################################################################
+################################################################################
+## Package dependencies
+
 FREETYPE_CFLAGS := $(shell freetype-config --cflags)
 FREETYPE_LIBS := $(shell freetype-config --libs)
+
 MJPEGTOOLS_CFLAGS := $(shell mjpegtools-config --cflags)
 MJPEGTOOLS_LIBS := $(shell mjpegtools-config --libs)
+
 SDL_CFLAGS := $(shell sdl-config --cflags)
 SDL_LIBS := $(shell sdl-config --libs)
+
 LUA_CFLAGS :=
 LUA_LIBS := -llua -llualib
+
 PNG_CFLAGS := $(shell libpng-config --cflags)
 PNG_LIBS := $(shell libpng-config --libs)
+
+GLIB_CFLAGS := $(shell glib-config --cflags)
+GLIB_LIBS := $(shell glib-config --libs)
+
+GTS_CFLAGS :=
+GTS_LIBS := -lgts
+
+################################################################################
+################################################################################
+
 
 gcc_FLAGS:=-Wall
 icc_FLAGS:= -wd1418,981,810,279,530,383,191,1469
@@ -53,6 +71,7 @@ CPPFLAGS:= -I/usr/local/include \
 	$(SDL_CFLAGS) \
 	$(FREETYPE_CFLAGS) \
 	$(MJPEGTOOLS_CFLAGS) \
+	$(GLIB_CFLAGS) \
 	$($(COMPILER)_CPPFLAGS)
 
 CXXFLAGS:=$(OPT) $(PROF) $(CPPFLAGS) $($(COMPILER)_FLAGS) $($(COMPILER)_CXXFLAGS)
@@ -76,6 +95,8 @@ BOKLIBS = \
 	$(LUA_LIBS) \
 	$(MJPEGTOOLS_LIBS) \
 	$(PNG_LIBS) \
+	$(GLIB_LIBS) \
+	$(GTS_LIBS) \
 	-lGLU -lGL -lz -ldc1394_control -lraw1394 -lm
 
 all: bokchoi
@@ -88,7 +109,7 @@ constellation: \
 	star.o $(TESTPAT) $(KLTOBJ) # Geom.o
 	$(CXX)  $(PROF) $(OPT) $(LDFLAGS) -o $@ $^ $(filter-out -L/usr/lib64,$(LIBS))
 
-bokchoi: bokchoi.o bok_lua.o \
+bokchoi: bokchoi.o bok_lua.o bok_mesh.o \
 	Camera.o DC1394Camera.o \
 	$(KLTOBJ) $(TESTPAT)
 	$(CXX)  $(PROF) $(OPT) $(LDFLAGS) -o $@ $^ \

@@ -15,6 +15,7 @@ function process_frame(frame)
    gfx.setstate({colour={}, blend='none'})
    if history[1] then
       local prev = history[1]
+      gfx.sprite(prev.width/2, prev.height/2, nil, prev)
    end
 
    --show current frame masked by Lua logo

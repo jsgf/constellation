@@ -15,6 +15,8 @@ extern "C" {
 #include <GL/glu.h>
 #include <GL/glext.h>
 
+#include "bok_mesh.h"
+
 #if GL_EXT_texture_rectangle
 #define GL_TEXTURE_RECTANGLE GL_TEXTURE_RECTANGLE_EXT
 #elif GL_ARB_texture_rectangle
@@ -43,6 +45,32 @@ static unsigned img_w, img_h;
 static bool ext_texture_rect;
 static int  max_texture_units;
 
+// Get a userdata object from the stack at the particular index.  If
+// the userdata object at that location doesn't have a metatable, or
+// the metadata table's __gc entry doesn't point to the provided gc
+// function, then fail.
+void *userdata_get(lua_State *L, int idx, lua_CFunction gc, const char *name)
+{
+	if (lua_isuserdata(L, idx) && lua_getmetatable(L, idx)) {
+		lua_CFunction meta_gc;
+
+		lua_pushliteral(L, "__gc");
+		lua_gettable(L, -2);
+		meta_gc = lua_tocfunction(L, -1);
+		lua_pop(L, 1);
+
+		if (meta_gc == gc) {
+			void *ret = lua_touserdata(L, idx);
+			if (ret != NULL)
+				return ret;
+		}
+	}		
+
+	luaL_error(L, "userdata type mismatch: expecting %s", name); // noreturn
+	return NULL;
+}
+
+
 /* ----------------------------------------------------------------------
    Tracker interface
    ---------------------------------------------------------------------- */
@@ -56,6 +84,16 @@ struct tracker
 	int min, max;
 	int active;
 };
+
+static int tracker_gc(lua_State *L);
+
+static struct tracker *tracker_get(lua_State *L, int idx)
+{
+	struct tracker *tracker;
+
+	tracker = (struct tracker *)userdata_get(L, idx, tracker_gc, "tracker");
+	return tracker;
+}
 
 // Update feature set with tracking results
 // Args: tracker feature_set
@@ -71,7 +109,7 @@ static int tracker_track(lua_State *L)
 	if (img == NULL)
 		luaL_error(L, "image not read yet");
 
-	tc = (struct tracker *)lua_touserdata(L, 1);
+	tc = tracker_get(L, 1);
 
 	if (tc->active == 0)
 		KLTSelectGoodFeatures(tc->tc, img, img_w, img_h, tc->fl);
@@ -199,13 +237,11 @@ static int tracker_index(lua_State *L)
 	struct tracker *tc;
 	const char *str;
 
-	if (!lua_isuserdata(L, 1))
-		luaL_error(L, "tracker:index not passed tracker");
+	tc = tracker_get(L, 1);
 
 	if (!lua_isstring(L, 2))
 		luaL_error(L, "tracker index must be string");
 
-	tc = (struct tracker *)lua_touserdata(L, 1);
 	str = lua_tostring(L, 2);
 
 	if (strcmp(str, "track") == 0)
@@ -265,10 +301,8 @@ static int tracker_gc(lua_State *L)
 {
 	struct tracker *tc;
 
-	if (!lua_isuserdata(L, 1))
-		luaL_error(L, "tracker_gc: not userdata");
+	tc = tracker_get(L, 1);
 
-	tc = (struct tracker *)lua_touserdata(L, 1);
 	KLTFreeFeatureList(tc->fl);
 	KLTFreeTrackingContext(tc->tc);
 
@@ -295,7 +329,6 @@ static int tracker_register(lua_State *L)
 	luaL_openlib(L, "tracker", tracker_methods, 0);	// lib
 
 	luaL_newmetatable(L, "tracker");		// lib meta
-
 	luaL_openlib(L, 0, tracker_meta, 0);		// lib meta
 
 	lua_pop(L, 2);
@@ -319,18 +352,23 @@ struct texture {
 	GLenum target;		// texture target
 };
 
+static int texture_gc(lua_State *L);
+
+static struct texture *texture_get(lua_State *L, int idx)
+{
+	return (struct texture *)userdata_get(L, idx, texture_gc, "texture");
+}
+
 static int texture_index(lua_State *L)
 {
 	struct texture *tex;
 	const char *str;
 
-	if (!lua_isuserdata(L, 1))
-		luaL_error(L, "texture:index not passed texture");
+	tex = texture_get(L, 1);
 
 	if (!lua_isstring(L, 2))
 		luaL_error(L, "texture index must be string");
 
-	tex = (struct texture *)lua_touserdata(L, 1);
 	str = lua_tostring(L, 2);
 
 	if (strcmp(str, "width") == 0)
@@ -603,7 +641,7 @@ static int texture_gc(lua_State *L)
 	if (!lua_isuserdata(L, 1))
 		luaL_error(L, "texture_gc: not userdata");
 
-	tex = (struct texture *)lua_touserdata(L, 1);
+	tex = texture_get(L, 1);
 
 	glDeleteTextures(1, &tex->texid);
 
@@ -673,7 +711,7 @@ static int gfx_sprite(lua_State *L)
 		int idx = 0;
 		for(int i = 4; i <= narg; i++)
 			if (lua_isuserdata(L, i))
-				t[idx++] = (struct texture *)lua_touserdata(L, i);
+				t[idx++] = texture_get(L, i);
 		assert(idx == ntex);
 	}
 
@@ -886,6 +924,7 @@ void lua_setup(const char *src)
 
 	tracker_register(state);
 	gfx_register(state);
+	mesh_register(state);
 
 	ext_texture_rect =
 		gluCheckExtension((GLubyte *)"GL_ARB_texture_rectangle",
