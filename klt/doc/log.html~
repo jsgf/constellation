@@ -1,0 +1,158 @@
+<title> Log of Changes </title>
+
+<a href = "index.html">
+<IMG SRC="home_motif.gif" ALIGN=bottom>
+</a>
+
+<hr>
+
+<h1> Log of Changes </h1>
+
+<ul>
+
+<li> <em> Version 1.1.3 </em>
+<ul>
+<li> <em> 3/11/98 </em>
+     <ul>
+     <li> Posted.
+     <li> Fixed bug in <code>KLTTrackFeatures()</code>.  In the
+		conditional just after the call to <code>_trackFeature()</code>,
+		<code>KLT_OOB</code> is now properly handled.
+     <li> Slightly improved bounds-checking by introducing an epsilon,
+		and by giving back an extra pixel along the border that had 
+		been taken away unnecessarily.
+	<li> If <tt>tc->window_[width,height]</tt> is unacceptable, 
+		a warning is now generated and the value is corrected.  
+		Previously an error was generated.
+     <li> In Example 5, changed search range from 20 to 15.  As a
+		result, if the window size is changed to 5 the number of 
+		pyramid levels remains 2, which prevents the border from 
+		increasing dramatically.
+     <li> In Makefile, change example dependencies from lib to libklt.a.
+		Unfortunately, changing the library source code (such as
+		<code>trackFeatures.c</code>) and then calling <tt>make
+		example1</tt> does not work properly, but at least
+		changing <tt>example1.c</tt> and then calling <tt>make
+		example1</tt> does work.  The latter case is probably more 
+		important, so we will have to live with the current tradeoff.
+	</ul>
+</ul>
+
+<li> <em> Version 1.1.2 </em>
+<ul>
+<li> <em> 2/24/98 </em>
+     <ul>
+     <li> Posted.
+     <li> Fixed major bug:  Added an explicit check to ensure that feature
+		does not drift out of bounds during tracking.  This removes the
+		problem of occasional crashes.
+     <li> Speeded up sorting by replacing qsort() with Manolis Lourakis' _quicksort() 
+		function.
+     <li> Added KLTSetVerbosity() to klt.c (It should have already been there)
+     <li> Changed ppmWriteFile() to ppmWriteFileRGB()
+     <li> Fixed minor bug:  assert() statement in line 314 of convolve.c
+     <li> In Makefile, change example dependencies from libklt.a to lib
+	</ul>
+</ul>
+
+<li> <em> Version 1.1.1 </em>
+<ul>
+<li> <em> 12/18/97 </em>
+     <ul>
+     <li> Posted.
+     <li> Fixed minor syntax bug:  Changed 'if feof(fp)' to 'if (feof(fp))' in writeFeatures.c
+     <li> Fixed major bug:  When tracking features, 'max_residue' was not
+	 	being computed correctly.  Therefore, feature windows that changed
+		a lot in intensity were not being detected.  Specifically, in
+		trackFeatures.c, I changed _sumFloatWindow to _sumAbsFloatWindow.
+	</ul>
+</ul>
+
+<li> <em> Version 1.1 </em>
+<ul>
+<li> <em> 10/16/97 </em>
+	<ul> 
+	<li> Fixed bug in pgmReadFile().  It was not skipping over the
+		last return character.
+	<li> Example 1 was updated to include binary files.
+	<li> Changed KLTWriteFeature...() and KLTReadFeature...()
+		to allow binary files, as well as text files.
+	</ul> 
+<li> <em> 10/15/97 </em>
+	<ul> 
+	<li> Posted
+	<li> Fixed obscure bug in KLTChangeTCPyramid() and
+		improved readability of that function
+	<li> Fixed incorrect assert() statement in _interpolate() function
+	</ul>
+</ul>
+
+<li> <em> Version 1.1 (beta) </em>
+<ul>
+<li> <em> 2/21/97 </em>
+	<ul> 
+	<li> Renamed as Version 1.1 (beta)
+	</ul>
+<li> <em> 2/15/97 </em>
+	<ul>
+	<li> Posted as Version 1.2 <br>
+		(This was a mistake; it should have been named Version 1.1 (beta).)
+	<li> Fixed obscure bug that sometimes caused infinite loop <br>
+		(bug was in _enforceMinimumDistance() function of
+		selectGoodFeatures.c)
+	<li> Amended KLTPrintTrackingContext() to print all the new
+		fields that were added in Version 1.1
+	</ul>
+</ul>
+
+<li> <em> Version 1.1 (alpha) </em>
+<ul>
+<li> <em> 2/21/97 </em>
+	<ul> Renamed as Version 1.1 (alpha) 
+	</ul>
+<li> <em> 2/10/97 </em>
+	<ul>
+	<li> Posted as Version 1.1 <br>
+		(This was a mistake; it should have been named Version 1.1 (alpha).)
+	<li> Features are lost when residue exceeded
+	<li> KLTSelectGoodFeatures() only accepts features whose minimum
+		eigenvalue is at least <code>tc->min_eigenvalue</code>
+	<li> User allowed to output internal images
+	<li> comments allowed in data files
+	<li> Default for <code>tc->smooth_sigma_fact</code> changed from 0.5 to 0.1
+	<li> Simplified _minEigenvalue() routine in selectGoodFeatures.c 
+	</ul>
+</ul>
+
+<li> <em> Version 1.0 (beta) </em>
+<ul>
+<li> <em> 2/10/97 </em>
+	<ul>
+	<li> Posted
+	<li> Print statements are prefaced by "(KLT) "
+	</ul>
+</ul>
+
+<li> <em> Version 1.0 (alpha) </em>
+<ul>
+<li> <em> 1/28/97 </em>
+	<ul>
+	<li> Removed '#include "pyramid.h"' from "klt.h"
+	<li> Changed '_KLT_Pyramid' in "klt.h" to 'void *'
+	<li> Forced coercion of 'void *' to '_KLT_Pyramid' in other files
+	</ul>
+<li> <em> 1/27/97 </em>
+	<dl>
+	<dt> Removed 'makedepend' from Makefile, along with dependencies
+		below '# DO NOT DELETE'
+	</dl>
+<li> <em> 1/24/97 </em>
+	<dl>
+	<dt> Posted
+	</dl>
+</ul>
+
+</ul>
+
+<hr>
+
