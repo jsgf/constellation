@@ -28,6 +28,8 @@ SDL_CFLAGS := $(shell sdl-config --cflags)
 SDL_LIBS := $(shell sdl-config --libs)
 LUA_CFLAGS :=
 LUA_LIBS := -llua -llualib
+PNG_CFLAGS := $(shell libpng-config --cflags)
+PNG_LIBS := $(shell libpng-config --libs)
 
 gcc_FLAGS:=-Wall
 icc_FLAGS:= -wd1418,981,810,279,530,383,191,1469
@@ -73,6 +75,7 @@ BOKLIBS = \
 	$(SDL_LIBS) \
 	$(LUA_LIBS) \
 	$(MJPEGTOOLS_LIBS) \
+	$(PNG_LIBS) \
 	-lGLU -lGL -lz -ldc1394_control -lraw1394 -lm
 
 all: constellation bokchoi

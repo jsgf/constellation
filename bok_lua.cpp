@@ -1,6 +1,7 @@
 // Lua interfaces
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 extern "C" {
 #include <lua.h>
@@ -9,7 +10,22 @@ extern "C" {
 #include <klt.h>
 }
 
+#include <png.h>
+#include <GL/glu.h>
+
 static lua_State *state;
+
+#define GLERR() _glerr(__FILE__, __LINE__);
+
+static void _glerr(const char *file, int line)
+{
+	GLenum err = glGetError();
+
+	if (err != GL_NO_ERROR) {
+		printf("GL error at %s:%d: %s\n",
+		       file, line, (char *)gluErrorString(err));
+	}
+}
 
 /* ----------------------------------------------------------------------
    Tracker interface
@@ -203,7 +219,7 @@ static int tracker_index(lua_State *L)
 
 // Creates a tracker userdata type
 // args (min, max, [ mindist ])
-static int new_tracker(lua_State *L)
+static int tracker_new(lua_State *L)
 {
 	struct tracker *tc;
 	int narg = lua_gettop(L);
@@ -233,10 +249,9 @@ static int new_tracker(lua_State *L)
 	tc->max = max;
 	tc->active = 0;
 
-	lua_pushstring(L, "_meta_tracker");	// user name
-	lua_gettable(L, LUA_REGISTRYINDEX);	// user meta
+	luaL_getmetatable(L, "tracker");	// user meta
 	if (!lua_istable(L, -1)) {
-		lua_pushstring(L, "missing _meta_tracker in registry");
+		lua_pushstring(L, "missing tracker.__meta in registry");
 		lua_error(L);
 	} 
 	lua_setmetatable(L, -2);
@@ -260,95 +275,455 @@ static int tracker_gc(lua_State *L)
 	return 0;
 }
 
-// tracker meta has the following fields:
-// - __gc - garbage collection
-// - track(self, features) - update feature set
-static void init_tracker_meta(lua_State *L)
+// Tracker library
+static const luaL_reg tracker_methods[] = {
+	{ "new",   tracker_new },
+
+	{ 0,0 }
+};
+
+// Tracker object metatable
+static const luaL_reg tracker_meta[] = {
+	{ "__gc",	tracker_gc },
+	{ "__index",	tracker_index },
+
+	{ 0,0 }
+};
+
+static int tracker_register(lua_State *L)
 {
-	lua_newtable(L);			// T
+	luaL_openlib(L, "tracker", tracker_methods, 0);	// lib
 
-	lua_pushstring(L, "__gc");		// T str
-	lua_pushcfunction(L, tracker_gc);	// T str func
-	lua_settable(L, 1);			// T
+	luaL_newmetatable(L, "tracker");		// lib meta
 
-	lua_pushstring(L, "__index");		// T str
-	lua_pushcfunction(L, tracker_index);	// T str func
-	lua_settable(L, 1);			// T
+	luaL_openlib(L, 0, tracker_meta, 0);		// lib meta
 
-	// register metatable
-	lua_pushstring(L, "_meta_tracker");	// T str
-	lua_pushvalue(L, 1);			// T str T
-	lua_settable(L, LUA_REGISTRYINDEX);	// T
-
-	lua_pop(L, 1);
+	lua_pop(L, 2);
+	return 1;
 }
 
 /* ----------------------------------------------------------------------
    Graphics interface
    ---------------------------------------------------------------------- */
-#include <GL/gl.h>
 
 // userdata texture structure
 struct texture {
 	GLuint texid;
 	int width;
 	int height;
+	int texwidth, texheight;
 
-	enum format {
-		mono,
-		monoa,
-		rgb,
-		rgba
-	};
+	float sw, sh;		// scale
+
+	GLenum format;
 };
-
-static int texture_gc(lua_State *L)
-{
-}
 
 static int texture_index(lua_State *L)
 {
+	struct texture *tex;
+	const char *str;
+
+	if (!lua_isuserdata(L, 1)) {
+		lua_pushstring(L, "tracker:index not passed tracker");
+		lua_error(L);
+	}
+
+	if (!lua_isstring(L, 2)) {
+		lua_pushstring(L, "tracker index must be string");
+		lua_error(L);
+	}
+
+	tex = (struct texture *)lua_touserdata(L, 1);
+	str = lua_tostring(L, 2);
+
+	if (strcmp(str, "width") == 0)
+		lua_pushnumber(L, tex->width);
+	else if (strcmp(str, "height") == 0)
+		lua_pushnumber(L, tex->height);
+	else if (strcmp(str, "format") == 0) {
+		const char *fmt = "?";
+
+		switch(tex->format) {
+		case GL_LUMINANCE:		fmt = "mono"; break;
+		case GL_LUMINANCE_ALPHA:	fmt = "monoa"; break;
+		case GL_RGB:			fmt = "rgb"; break;
+		case GL_RGBA:			fmt = "rgba"; break;
+		}
+		lua_pushstring(L, fmt);
+	} else
+		lua_pushnil(L);
+
+	return 1;
 }
 
-static void init_texture_meta(lua_State *L)
+static unsigned power2(unsigned x)
 {
-	lua_newtable(L);
+	unsigned ret = 1;
 
-	lua_pushstring(L, "__gc");
-	lua_pushcfunction(L, texture_gc);
-	lua_settable(L, 1);
+	while(ret < x)
+		ret <<= 1;
 
-	lua_pushstring(L, "__index");
-	lua_pushcfunction(L, texture_index);
-	lua_settable(L, 1);
-
-	lua_pushstring(L, "_meta_texture");
-	lua_pushvalue(L, 1);
-	lua_settable(L, LUA_REGISTRYINDEX);
-
-	lua_pop(L, 1);
+	return ret;
 }
 
-static int new_texture(lua_State *L)
+// Create a texture userdata object.
+// Args: filename
+static int texture_new(lua_State *L)
 {
+	const char *filename;
+	FILE *fp;
+	struct texture *tex = NULL;
+	int channels;
+	GLenum fmt;
+	int texwidth, texheight;
+
+	const char *error = NULL;
+	png_structp png_ptr = NULL;
+	png_infop info_ptr = NULL;
+	png_infop end_info = NULL;
+
+	if (!lua_isstring(L, 1)) {
+		lua_pushstring(L, "need filename");
+		lua_error(L);
+	}
+
+	filename = lua_tostring(L, 1);
+	fp = fopen(filename, "rb");
+
+	if (fp == NULL) {
+		lua_pushfstring(L, "Can't open PNG file %s: %s",
+				filename, strerror(errno));
+		lua_error(L);
+	}
+
+	png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, 
+					 NULL, NULL, NULL);
+
+	if (!png_ptr) {
+		error = "failed to allocate png_struct";
+		goto out;
+	}
+
+	info_ptr = png_create_info_struct(png_ptr);
+	if (!info_ptr)
+	{
+		error = "failed to allocate png_info";
+		goto out;
+	}
+
+	end_info = png_create_info_struct(png_ptr);
+	if (!end_info)
+	{
+		error = "failed to allocate end png_info";
+		goto out;
+	}
+
+	if (setjmp(png_jmpbuf(png_ptr))) {
+		error = "PNG error";
+		goto out;
+	}
 	
+	png_init_io(png_ptr, fp);
+
+	png_read_png(png_ptr, info_ptr, 
+		     PNG_TRANSFORM_STRIP_16 |
+		     PNG_TRANSFORM_PACKING |
+		     PNG_TRANSFORM_EXPAND, NULL);
+
+	png_uint_32 width, height;
+	int bitdepth, color_type;
+
+	png_get_IHDR(png_ptr, info_ptr, &width, &height,
+		     &bitdepth, &color_type, NULL, NULL, NULL);
+
+	printf("width=%d height=%d bitdepth=%d color_type=%d\n",
+	       width, height, bitdepth, color_type);
+
+	switch(color_type) {
+	case PNG_COLOR_TYPE_GRAY:
+		fmt = GL_LUMINANCE;
+		channels = 1;
+		break;
+
+	case PNG_COLOR_TYPE_GRAY_ALPHA:
+		fmt = GL_LUMINANCE_ALPHA;
+		channels = 2;
+		break;
+
+	case PNG_COLOR_TYPE_RGB:
+		fmt = GL_RGB;
+		channels = 3;
+		break;
+
+	case PNG_COLOR_TYPE_RGB_ALPHA:
+		fmt = GL_RGBA;
+		channels = 4;
+		break;
+
+	default:
+		error = "unsupported image format";
+		goto out;
+	}
+
+	texwidth = power2(width);
+	texheight = power2(height);
+
+	{
+		png_byte pixels[texwidth * texheight * channels];
+		png_bytep *rows;
+
+		memset(pixels, 0, texwidth * texheight * channels);
+
+		rows = png_get_rows(png_ptr, info_ptr);
+		int rowbytes = png_get_rowbytes(png_ptr, info_ptr);
+
+		for(unsigned r = 0; r < height; r++) {
+			png_byte *row = &pixels[r * texwidth * channels];
+			memcpy(row, rows[r], rowbytes);
+			if (color_type & PNG_COLOR_MASK_ALPHA) {
+				png_byte *pix = row;
+				for(int x = 0; x < width; x++, pix += channels)
+					for(int c = 0; c < channels-1; c++)
+						pix[c] = pix[c] * pix[channels-1] / 255;
+			}
+		}
+
+		tex = (struct texture *)lua_newuserdata(L, sizeof(*tex));
+
+		glGenTextures(1, &tex->texid);
+		tex->width = width;
+		tex->height = height;
+		tex->format = fmt;
+		tex->texwidth = texwidth;
+		tex->texheight = texheight;
+
+		tex->sw = (float)width / texwidth;
+		tex->sh = (float)height / texheight;
+
+		luaL_getmetatable(L, "texture");
+		lua_setmetatable(L, -2);
+
+		glBindTexture(GL_TEXTURE_2D, tex->texid);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		gluBuild2DMipmaps(GL_TEXTURE_2D, fmt, 
+				  texwidth, texheight, 
+				  fmt, GL_UNSIGNED_BYTE, pixels);
+		GLERR();
+	}
+
+  out:
+	fclose(fp);
+
+	png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
+
+	if (error != NULL) {
+		lua_pushstring(L, error);
+		lua_error(L);
+	}
+
+	return 1;
 }
 
-// Create a global table called "gfx", which wraps up the graphics
-// related functions and objects.
-static void init_graphics(lua_State *L)
+static int texture_gc(lua_State *L)
 {
-	init_texture_meta(L);
+	struct texture *tex;
 
-	lua_pushstring(L, "gfx");
+	if (!lua_isuserdata(L, 1)) {
+		lua_pushstring(L, "texture_gc: not userdata");
+		lua_error(L);
+	}
 
-	lua_newtable(L);
+	tex = (struct texture *)lua_touserdata(L, 1);
 
-	lua_pushstring(L, "texture");
-	lua_pushcfunction(L, new_texture);
-	lua_settable(L, 2);
+	glDeleteTextures(1, &tex->texid);
 
-	lua_settable(L, LUA_GLOBALINDEX);
+	return 0;
+}
+
+static const luaL_reg texture_meta[] = {
+	{ "__gc",	texture_gc },
+	{ "__index",	texture_index },
+
+	{0,0}
+};
+
+static int gfx_point(lua_State *L)
+{
+	int narg = lua_gettop(L);
+	float x, y;
+
+	if (narg < 2) {
+		lua_pushstring(L, "need at least (x,y)");
+		lua_error(L);
+	}
+	x = lua_tonumber(L, 1);
+	y = lua_tonumber(L, 2);
+
+	glBegin(GL_POINTS);
+	glVertex2f(x, y);
+	glEnd();
+
+	return 0;
+}
+
+// args: texture x y scale
+static int gfx_sprite(lua_State *L)
+{
+	struct texture *tex;
+	float x, y, scale;
+	float dx, dy;
+
+	if (!lua_isuserdata(L, 1)) {
+		lua_pushstring(L, "need texture");
+		lua_error(L);
+	}
+
+	tex = (struct texture *)lua_touserdata(L, 1);
+
+	x = lua_tonumber(L, 2);
+	y = lua_tonumber(L, 3);
+	scale = lua_tonumber(L, 4);
+
+	dx = tex->width * scale / 2;
+	dy = tex->height * scale / 2;
+
+	glBindTexture(GL_TEXTURE_2D, tex->texid);
+	glEnable(GL_TEXTURE_2D);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
+
+	glMatrixMode(GL_TEXTURE);
+	glLoadIdentity();
+	glMatrixMode(GL_MODELVIEW);
+
+	if (0)
+		printf("id=%d x=%g,y=%g dx=%g dy=%g sw=%g sh=%g\n",
+		       tex->texid, x, y, dx, dy, tex->sw, tex->sh);
+	
+	glBegin(GL_QUADS);
+	glTexCoord2f(0, 0);
+	glVertex2f(x - dx, y - dy);
+
+	glTexCoord2f(tex->sw, 0);
+	glVertex2f(x + dx, y - dy);
+
+	glTexCoord2f(tex->sw, tex->sh);
+	glVertex2f(x + dx, y + dy);
+
+	glTexCoord2f(0, tex->sh);
+	glVertex2f(x - dx, y + dy);
+	glEnd();
+
+	GLERR();
+
+	glDisable(GL_TEXTURE_2D);
+	return 0;
+}
+
+// Expect to see a table on the stack at idx;
+// look for interesting elements
+static void setstate(lua_State *L, int idx)
+{
+	int top = lua_gettop(L);
+
+	if (idx < 0)
+		idx = top + idx + 1;
+
+	if (lua_gettop(L) < 1 || !lua_istable(L, idx)) {
+		lua_pushstring(L, "state is not a table");
+		lua_error(L);
+	}
+
+	lua_pushstring(L, "colour");
+	lua_gettable(L, idx);
+	
+	if (lua_istable(L, -1)) {
+		// Colour is either { R, G, B, A } or { r=R, g=G, b=B, a=A }
+		// (or a mixture)
+		static const char *channels[] = { "r", "g", "b", "a" };
+		float col[4] = { 1, 1, 1, 1 };
+
+		for(int i = 0; i < 4; i++) {
+			lua_pushstring(L, channels[i]);
+			lua_gettable(L, -2);
+
+			if (!lua_isnumber(L, -1)) {
+				lua_pop(L, 1);
+				lua_pushnumber(L, i+1);
+				lua_gettable(L, -2);
+
+				if (!lua_isnumber(L, -1)) {
+					lua_pop(L, 1);
+					break;
+				}
+			}
+			col[i] = lua_tonumber(L, -1);
+			lua_pop(L, 1);
+		}
+
+		glColor4fv(col);
+	}
+	lua_settop(L, top);
+
+	lua_pushstring(L, "blend");
+	lua_gettable(L, idx);
+	if (lua_isstring(L, -1)) {
+		const char *str = lua_tostring(L, -1);
+
+		if (strcmp(str, "none") == 0)
+			glDisable(GL_BLEND);
+		else if (strcmp(str, "add") == 0) {
+			glBlendFunc(GL_ONE, GL_ONE);
+			glEnable(GL_BLEND);
+		} else if (strcmp(str, "1-alpha") == 0) {
+			glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+			glEnable(GL_BLEND);
+		} else {
+			lua_pushstring(L, "bad blend mode");
+			lua_error(L);
+		}
+	}
+	lua_settop(L, top);
+
+	if (lua_isnumber(L, -1))
+		glPointSize(lua_tonumber(L, -1));
+	lua_settop(L, top);
+}
+
+static int gfx_setstate(lua_State *L)
+{
+	setstate(L, -1);
+
+	return 0;
+}
+
+
+static const luaL_reg gfx_methods[] = {
+	// rendering operations
+	{ "point",	gfx_point },
+	{ "sprite",	gfx_sprite },
+
+	// state setting
+	{ "setstate",	gfx_setstate },
+//	{ "getstate",	gfx_getstate },
+
+	// texture constructor
+	{ "texture",	texture_new },
+
+	{0,0}
+};
+
+static void gfx_register(lua_State *L)
+{
+	luaL_openlib(L, "gfx", gfx_methods, 0);
+
+	luaL_newmetatable(L, "texture");
+	luaL_openlib(L, NULL, texture_meta, 0);
 }
 
 /* ----------------------------------------------------------------------
@@ -375,10 +750,9 @@ void lua_setup(const char *src)
 	luaopen_io(L);
 	luaopen_string(L);
 	luaopen_math(L);
-	
-	init_tracker_meta(state);
 
-	lua_register(L, "new_tracker", new_tracker);
+	tracker_register(state);
+	gfx_register(state);
 
 	ret = luaL_loadfile(L, src);
 	if (ret) {
