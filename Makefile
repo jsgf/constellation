@@ -1,6 +1,6 @@
 COMPILER:=gcc
 
-gcc_CXX:=g++33
+gcc_CXX:=g++
 gcc_CC:=gcc
 
 pcc_CXX:=/opt/pathscale/bin/pathCC-2.0 -fmangle-conv-op-name  
@@ -11,8 +11,10 @@ icc_CC:=icc
 
 # PROF:=-pg
 
-CGAL:=/home/jeremy/src/CGAL-3.0.1
-CGALPLAT:=x86_64_Linux-2.6.9-1.667_g++33-3.3.4
+#CGAL:=/home/jeremy/robot/src/CGAL-3.0.1
+#CGALPLAT:=i686_Linux-2.6.7-rc3-mm2_g++-3.3.3
+CGAL:=/home/jeremy/robot/src/CGAL-3.1
+CGALPLAT:=i686_Linux-2.6.11-mm4_g++-3.4.2
 
 KLTSRC:=convolve.c error.c pnmio.c pyramid.c selectGoodFeatures.c \
 	storeFeatures.c trackFeatures.c klt.c klt_util.c writeFeatures.c
@@ -24,12 +26,14 @@ MJPEGTOOLS_CFLAGS := $(shell mjpegtools-config --cflags)
 MJPEGTOOLS_LIBS := $(shell mjpegtools-config --libs)
 SDL_CFLAGS := $(shell sdl-config --cflags)
 SDL_LIBS := $(shell sdl-config --libs)
+LUA_CFLAGS :=
+LUA_LIBS := -llua -llualib
 
 gcc_FLAGS:=-Wall
 icc_FLAGS:= -wd1418,981,810,279,530,383,191,1469
 
 gcc_DEBUG:=-ggdb -fno-inline -O
-gcc_OPT:=-ggdb -O2
+gcc_OPT:=-ggdb -O2 -msse -mfpmath=sse -march=pentium-m
 
 pcc_OPT:=-O3 -LNO:simd_verbose=ON -LNO:simd=2 -LNO:prefetch=2 #-fb_opt fbdata #  -g -fno-inline
 #pcc_OPT:=-Ofast -LNO:prefetch=2
@@ -39,7 +43,7 @@ icc_OPT:=-O3 -xN
 CC:=$($(COMPILER)_CC)
 CXX:=$($(COMPILER)_CXX)
 
-OPT:=$($(COMPILER)_DEBUG)
+OPT:=$($(COMPILER)_OPT)
 
 CPPFLAGS:= -I/usr/local/include \
 	-Iklt \
@@ -57,6 +61,7 @@ LIBS:= \
 	$(SDL_LIBS) \
 	$(FREETYPE_LIBS) \
 	$(MJPEGTOOLS_LIBS) \
+	$(LUA_LIBS) \
 	-lGLU -lGL \
 	-L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL \
 	-lfftw3 \
@@ -64,7 +69,13 @@ LIBS:= \
 	-ldc1394_control -lraw1394 \
 	-lm
 
-all: constellation
+BOKLIBS = \
+	$(SDL_LIBS) \
+	$(LUA_LIBS) \
+	$(MJPEGTOOLS_LIBS) \
+	-lGLU -lGL -lz -ldc1394_control -lraw1394 -lm
+
+all: constellation bokchoi
 
 TESTPAT=tcf_sydney.o Indian_Head_320.o nbc-320.o
 
@@ -73,6 +84,12 @@ constellation: \
 	FeatureSet.o Feature.o VaultOfHeaven.o misc.o \
 	star.o $(TESTPAT) $(KLTOBJ) # Geom.o
 	$(CXX)  $(PROF) $(OPT) $(LDFLAGS) -o $@ $^ $(filter-out -L/usr/lib64,$(LIBS))
+
+bokchoi: bokchoi.o bok_lua.o \
+	Camera.o DC1394Camera.o \
+	$(KLTOBJ) $(TESTPAT)
+	$(CXX)  $(PROF) $(OPT) $(LDFLAGS) -o $@ $^ \
+		$(filter-out -L/usr/lib64,$(BOKLIBS))
 
 %.mpg: %.ppm.gz
 	zcat $< | ppmtoy4m | mpeg2enc -f 2 -q8 -o $@

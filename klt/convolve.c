@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>   /* malloc(), realloc() */
+#include <stdint.h>
 
 /* Our includes */
 #include "base.h"
@@ -275,6 +276,7 @@ static void _convolveImageVert(
       imgout->data[outidx++] = sum;
 #else  /* __OPTIMIZE__ */
 #ifdef USE_SSE
+    assert((intptr_t)(imgin->data) % 16 == 0);
     for (i = 0 ; i < ncols ; i += 8)  {
       int ppidx = (j-radius)*ncols + i;
       __m128 sum0, sum1;

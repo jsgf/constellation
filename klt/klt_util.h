@@ -9,6 +9,7 @@ typedef struct  {
   int ncols;
   int nrows;
   float *data;
+  int pad;			/* 16 bytes */
 }  _KLT_FloatImageRec, *_KLT_FloatImage;
 
 _KLT_FloatImage _KLTCreateFloatImage(

@@ -101,4 +101,4 @@ void FeatureSet_Base::update(const unsigned char *img, int w, int h)
 	assert(active_ == KLTCountRemainingFeatures(klt_fl_));
 }
 
-template FeatureSet<Feature>;
+template class FeatureSet<Feature>;
