@@ -65,15 +65,11 @@ static int tracker_track(lua_State *L)
 	struct tracker *tc;
 	int active;
 
-	if (narg != 2 || !lua_isuserdata(L, 1) || !lua_istable(L, 2)) {
-		lua_pushstring(L, "args: tracker features");
-		lua_error(L);
-	}
+	if (narg != 2 || !lua_isuserdata(L, 1) || !lua_istable(L, 2))
+		luaL_error(L, "args: tracker features");
 
-	if (img == NULL) {
-		lua_pushstring(L, "image not read yet");
-		lua_error(L);
-	}
+	if (img == NULL)
+		luaL_error(L, "image not read yet");
 
 	tc = (struct tracker *)lua_touserdata(L, 1);
 
@@ -203,15 +199,11 @@ static int tracker_index(lua_State *L)
 	struct tracker *tc;
 	const char *str;
 
-	if (!lua_isuserdata(L, 1)) {
-		lua_pushstring(L, "tracker:index not passed tracker");
-		lua_error(L);
-	}
+	if (!lua_isuserdata(L, 1))
+		luaL_error(L, "tracker:index not passed tracker");
 
-	if (!lua_isstring(L, 2)) {
-		lua_pushstring(L, "tracker index must be string");
-		lua_error(L);
-	}
+	if (!lua_isstring(L, 2))
+		luaL_error(L, "tracker index must be string");
 
 	tc = (struct tracker *)lua_touserdata(L, 1);
 	str = lua_tostring(L, 2);
@@ -239,10 +231,8 @@ static int tracker_new(lua_State *L)
 	int min, max;
 	int mindist = 15;
 
-	if (narg < 2 || !lua_isnumber(L, 1) || !lua_isnumber(L, 2)) {
-		lua_pushstring(L, "need min and max");
-		lua_error(L);
-	}
+	if (narg < 2 || !lua_isnumber(L, 1) || !lua_isnumber(L, 2))
+		luaL_error(L, "need min and max");
 
 	min = (int)lua_tonumber(L, 1);
 	max = (int)lua_tonumber(L, 2);
@@ -263,10 +253,9 @@ static int tracker_new(lua_State *L)
 	tc->active = 0;
 
 	luaL_getmetatable(L, "tracker");	// user meta
-	if (!lua_istable(L, -1)) {
-		lua_pushstring(L, "missing tracker.__meta in registry");
-		lua_error(L);
-	} 
+	if (!lua_istable(L, -1))
+		luaL_error(L, "missing tracker.__meta in registry");
+
 	lua_setmetatable(L, -2);
 	
 	return 1;		// return user
@@ -276,10 +265,8 @@ static int tracker_gc(lua_State *L)
 {
 	struct tracker *tc;
 
-	if (!lua_isuserdata(L, 1)) {
-		lua_pushstring(L, "tracker_gc: not userdata");
-		lua_error(L);
-	}
+	if (!lua_isuserdata(L, 1))
+		luaL_error(L, "tracker_gc: not userdata");
 
 	tc = (struct tracker *)lua_touserdata(L, 1);
 	KLTFreeFeatureList(tc->fl);
@@ -337,15 +324,11 @@ static int texture_index(lua_State *L)
 	struct texture *tex;
 	const char *str;
 
-	if (!lua_isuserdata(L, 1)) {
-		lua_pushstring(L, "tracker:index not passed tracker");
-		lua_error(L);
-	}
+	if (!lua_isuserdata(L, 1))
+		luaL_error(L, "texture:index not passed texture");
 
-	if (!lua_isstring(L, 2)) {
-		lua_pushstring(L, "tracker index must be string");
-		lua_error(L);
-	}
+	if (!lua_isstring(L, 2))
+		luaL_error(L, "texture index must be string");
 
 	tex = (struct texture *)lua_touserdata(L, 1);
 	str = lua_tostring(L, 2);
@@ -395,6 +378,11 @@ static void init_tex_tc(struct texture *tex, float w, float h)
 	tex->tc[3*2+1] = h;
 }
 
+// Make a texture from a frame of input.  This uses the texture_rect
+// extension if possible, to avoid having to allocate lots of texture
+// memory and handle the non-power-of-2 edge cases.
+//
+// TODO: defer allocating texture memory until we first render?
 static int texture_new_frame(lua_State *L,
 			     const unsigned char *img, 
 			     int width, int height,
@@ -421,8 +409,8 @@ static int texture_new_frame(lua_State *L,
 		init_tex_tc(tex, width, height);
 
 		tex->target = GL_TEXTURE_RECTANGLE;
-
 	} else {
+		// XXX FIXME
 		tex->texwidth = power2(width);
 		tex->texheight = power2(height);
 
@@ -468,19 +456,15 @@ static int texture_new_png(lua_State *L)
 	png_infop info_ptr = NULL;
 	png_infop end_info = NULL;
 
-	if (!lua_isstring(L, 1)) {
-		lua_pushstring(L, "need filename");
-		lua_error(L);
-	}
+	if (!lua_isstring(L, 1))
+		luaL_error(L, "need filename");
 
 	filename = lua_tostring(L, 1);
 	fp = fopen(filename, "rb");
 
-	if (fp == NULL) {
-		lua_pushfstring(L, "Can't open PNG file %s: %s",
-				filename, strerror(errno));
-		lua_error(L);
-	}
+	if (fp == NULL)
+		luaL_error(L, "Can't open PNG file %s: %s",
+			   filename, strerror(errno));
 
 	png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, 
 					 NULL, NULL, NULL);
@@ -606,10 +590,8 @@ static int texture_new_png(lua_State *L)
 
 	png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
 
-	if (error != NULL) {
-		lua_pushstring(L, error);
-		lua_error(L);
-	}
+	if (error != NULL)
+		luaL_error(L, error);
 
 	return 1;
 }
@@ -618,10 +600,8 @@ static int texture_gc(lua_State *L)
 {
 	struct texture *tex;
 
-	if (!lua_isuserdata(L, 1)) {
-		lua_pushstring(L, "texture_gc: not userdata");
-		lua_error(L);
-	}
+	if (!lua_isuserdata(L, 1))
+		luaL_error(L, "texture_gc: not userdata");
 
 	tex = (struct texture *)lua_touserdata(L, 1);
 
@@ -642,10 +622,8 @@ static int gfx_point(lua_State *L)
 	int narg = lua_gettop(L);
 	int npoints = narg / 2;
 
-	if (npoints < 1) {
-		lua_pushstring(L, "need at least (x,y)");
-		lua_error(L);
-	}
+	if (npoints < 1)
+		luaL_error(L, "need at least (x,y)");
 
 	glBegin(GL_POINTS);
 
@@ -673,10 +651,8 @@ static int gfx_sprite(lua_State *L)
 	int narg = lua_gettop(L);
 	int ntex = 0;
 
-	if (narg < 4) {
-		lua_pushstring(L, "sprite(x, y, nil|size|{width, height}, texture, [texture...])");
-		lua_error(L);
-	}
+	if (narg < 4)
+		luaL_error(L, "sprite(x, y, nil|size|{width, height}, texture, [texture...])");
 
 	x = lua_tonumber(L, 1);
 	y = lua_tonumber(L, 2);
@@ -685,10 +661,8 @@ static int gfx_sprite(lua_State *L)
 		if (lua_isuserdata(L, i))
 			ntex++;
 
-	if (ntex == 0) {
-		lua_pushstring(L, "need at least one texture");
-		lua_error(L);
-	}
+	if (ntex == 0)
+		luaL_error(L, "need at least one texture");
 
 	if (ntex > max_texture_units)
 		ntex = max_texture_units;
@@ -703,11 +677,9 @@ static int gfx_sprite(lua_State *L)
 		assert(idx == ntex);
 	}
 
-	if (t[0]->width == 0 || t[0]->height == 0) {
-		lua_pushfstring(L, "bad %dx%d texture", 
-				t[0]->width, t[0]->height);
-		lua_error(L);
-	}
+	if (t[0]->width == 0 || t[0]->height == 0)
+		luaL_error(L, "bad %dx%d texture", 
+			   t[0]->width, t[0]->height);
 
 	width = t[0]->width;
 	height = t[0]->height;
@@ -793,10 +765,8 @@ static void setstate(lua_State *L, int idx)
 	if (idx < 0)
 		idx = top + idx + 1;
 
-	if (lua_gettop(L) < 1 || !lua_istable(L, idx)) {
-		lua_pushstring(L, "state is not a table");
-		lua_error(L);
-	}
+	if (lua_gettop(L) < 1 || !lua_istable(L, idx))
+		luaL_error(L, "state is not a table");
 
 	lua_pushstring(L, "colour");
 	lua_gettable(L, idx);
@@ -848,10 +818,8 @@ static void setstate(lua_State *L, int idx)
 		} else if (strcmp(str, "alpha") == 0) {
 			glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 			glEnable(GL_BLEND);
-		} else {
-			lua_pushstring(L, "bad blend mode");
-			lua_error(L);
-		}
+		} else
+			luaL_error(L, "bad blend mode: must be one of none|add|alpha");
 	}
 	lua_settop(L, top);
 
@@ -896,7 +864,7 @@ static void gfx_register(lua_State *L)
    ---------------------------------------------------------------------- */
 static int panic(lua_State *L)
 {
-	fprintf(stderr, "LUA panic: %s\n", lua_tostring(L, -1));
+	fprintf(stderr, "%s\n", lua_tostring(L, -1));
 
 	return 0;
 }
