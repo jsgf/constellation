@@ -116,8 +116,10 @@ GlyphCache::GlyphCache(unsigned char ch)
 	_th = (float)_h / th;
 		
 	glBindTexture(GL_TEXTURE_2D, texid);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_INTENSITY, tw, th, 0, GL_INTENSITY, GL_UNSIGNED_BYTE,
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_INTENSITY, tw, th, 0, 
+		     GL_LUMINANCE, GL_UNSIGNED_BYTE,
 		     tex);
+	GLERR();
 	
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);		
