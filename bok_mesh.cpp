@@ -124,8 +124,16 @@ static void bok_vertex_clone(GtsObject *clone, GtsObject *object)
 {
 	(* GTS_OBJECT_CLASS (bok_vertex_class ())->parent_class->clone) (clone, 
 									 object);
-	BOK_VERTEX (clone)->L = NULL;
-	BOK_VERTEX (clone)->ref = LUA_NOREF;
+	if (BOK_VERTEX(object)->ref != LUA_NOREF) {
+		BokVertex *obv = BOK_VERTEX(object);
+		BokVertex *nbv = BOK_VERTEX(clone);
+
+		assert(obv->L != NULL);
+		assert(nbv->L == obv->L);
+
+		pushref(obv->L, obv->ref);
+		nbv->ref = luaL_ref(nbv->L, LUA_REGISTRYINDEX);
+	}
 }
 
 static void bok_vertex_destroy (GtsObject * object)
@@ -220,8 +228,8 @@ struct _BokEdge {
 #define IS_BOK_EDGE(obj)         (gts_object_is_from_class (obj,\
 							       bok_edge_class ()))
 
-GtsEdgeClass * bok_edge_class  (void);
-BokEdge * bok_edge_new    (GtsEdgeClass * klass);
+static GtsEdgeClass * bok_edge_class  (void);
+static BokEdge * bok_edge_new    (GtsEdgeClass * klass);
 
 static void bok_edge_init (BokEdge * object)
 {
@@ -232,9 +240,21 @@ static void bok_edge_init (BokEdge * object)
 static void bok_edge_clone(GtsObject *clone, GtsObject *object)
 {
 	(* GTS_OBJECT_CLASS (bok_edge_class ())->parent_class->clone) (clone, 
-									  object);
-	BOK_EDGE (clone)->L = NULL;
-	BOK_EDGE (clone)->ref = LUA_NOREF;
+								       object);
+	if (BOK_EDGE(object)->ref != LUA_NOREF) {
+		BokEdge *obe = BOK_EDGE(object);
+		BokEdge *nbe = BOK_EDGE(clone);
+
+		assert(obe->L != NULL);
+		assert(nbe->L == obe->L);
+
+		pushref(obe->L, obe->ref);
+		nbe->ref = luaL_ref(nbe->L, LUA_REGISTRYINDEX);
+
+		// clone vertexes
+		GTS_SEGMENT(clone)->v1 = GTS_SEGMENT(object)->v1;
+		GTS_SEGMENT(clone)->v2 = GTS_SEGMENT(object)->v2;
+	}
 }
 
 static void bok_edge_destroy (GtsObject * object)
@@ -285,7 +305,7 @@ GtsEdgeClass * bok_edge_class (void)
 	return klass;
 }
 
-BokEdge * bok_edge_new (GtsEdgeClass * klass)
+static BokEdge * bok_edge_new (GtsEdgeClass * klass)
 {
 	BokEdge * object;
 
@@ -586,14 +606,9 @@ static bool delaunay_check (GtsSurface *surface, GtsTriangle * t)
 	return ret;
 }
 
-// Update the mesh if a point moves.
+// Update the mesh when a point moves.
 //
-// XXX This is pretty useless; it will remove and replace the edges
-// even if the mesh topology is unchanged, which destroys any edge
-// annotations.  At the moment this looks to see if the moved point
-// violates the delaunay constraint, and if so removes it and re-adds
-// it.  This will remove and replace edges which end up being
-// unchanged.
+// This retains all edges which are unaffected by the move.
 static int mesh_move(lua_State *L)
 {
 	struct mesh *mesh = mesh_get(L, 1);
@@ -610,9 +625,11 @@ static int mesh_move(lua_State *L)
 	BokVertex *v = BOK_VERTEX(d);
 	GtsPoint *p = GTS_POINT(v);
 
+	// move the point
 	p->x = x;
 	p->y = y;
 
+	// walk neighbouring faces, and see if any are now illegal
 	GSList *list = gts_vertex_faces(GTS_VERTEX(v), mesh->surface, NULL);
 
 	for(GSList *l = list; l != NULL; l = l->next) {
@@ -623,8 +640,44 @@ static int mesh_move(lua_State *L)
 		if (!delaunay_check(mesh->surface, GTS_TRIANGLE(f))) {
 			gts_allow_floating_vertices = TRUE;
 
+			GSList *segments = NULL;
+
+			// save a list of interesting edges so we can restore them if needed
+			for(GSList *s = GTS_VERTEX(v)->segments; s != NULL; s = s->next) {
+				if (IS_BOK_EDGE(s->data) && BOK_EDGE(s->data)->ref != LUA_NOREF)
+					segments = g_slist_prepend(segments, 
+								   gts_object_clone(GTS_OBJECT(s->data)));
+			}
+
 			gts_delaunay_remove_vertex(mesh->surface, GTS_VERTEX(v));
 			gts_delaunay_add_vertex(mesh->surface, GTS_VERTEX(v), NULL);
+
+			// Search segment list for new matching
+			// segments, and reattach the Lua state
+			for(GSList *s = segments; s != NULL; s = s->next) {
+				BokEdge *be = BOK_EDGE(s->data);
+
+				assert(IS_BOK_EDGE(be));
+				
+				for(GSList *vs = GTS_VERTEX(v)->segments; 
+				    vs != NULL; vs = vs->next) {
+					BokEdge *ve = BOK_EDGE(vs->data);
+
+					if (IS_BOK_EDGE(vs->data) &&
+					    ve->ref == LUA_NOREF &&
+					    gts_segments_are_identical(GTS_SEGMENT(be),
+								       GTS_SEGMENT(ve))) {
+						// transfer ownership of Lua reference
+						ve->L = be->L;
+						ve->ref = be->ref;
+						be->L = NULL;
+						be->ref = LUA_NOREF;
+					}
+				}
+				gts_object_destroy(GTS_OBJECT(be));
+			}
+
+			g_slist_free(segments);
 
 			gts_allow_floating_vertices = FALSE;			
 			break;
