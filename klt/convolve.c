@@ -13,6 +13,11 @@
 #include "convolve.h"
 #include "klt_util.h"   /* printing */
 
+#if __SSE__
+#include <xmmintrin.h>
+#define USE_SSE
+#endif
+
 #define MAX_KERNEL_WIDTH 	71
 
 
@@ -208,10 +213,14 @@ static void _convolveImageVert(
   /* Must read from and write to different images */
   assert(imgin != imgout);
 
+  /* require input cols to be a multiple of 8 */
+  assert(ncols % 8 == 0);
+
   /* Output image must be large enough to hold result */
   assert(imgout->ncols >= imgin->ncols);
   assert(imgout->nrows >= imgin->nrows);
 
+#if 0
   /* For each column, do ... */
   for (i = 0 ; i < ncols ; i++)  {
 
@@ -242,6 +251,80 @@ static void _convolveImageVert(
     colidx++;
     outidx -= nrows * ncols - 1;
   }
+#else
+  /* alternate loop structure: go across the output image, but we're
+     still going down the input image.
+  */
+  /* Zero top */
+  outidx = 0;
+  for(j = 0; j < (ncols*radius); j++)
+    imgout->data[outidx++] = 0.;
+
+  /* For each row, do ... */
+  for (j = radius ; j < nrows-radius ; j++)  {
+#if !__OPTIMIZE__
+    /* Convolve middle columns with kernel */
+    for (i = 0 ; i < ncols ; i++)  {
+      int ppidx = (j-radius)*ncols + i;
+      float sum = 0.0;
+      for (k = kernel.width-1 ; k >= 0 ; k--) {
+        sum += imgin->data[ppidx] * kernel.data[k];
+	ppidx += ncols;
+      }
+      
+      imgout->data[outidx++] = sum;
+#else  /* __OPTIMIZE__ */
+#ifdef USE_SSE
+    for (i = 0 ; i < ncols ; i += 8)  {
+      int ppidx = (j-radius)*ncols + i;
+      __m128 sum0, sum1;
+      float *in = &imgin->data[ppidx];
+      sum0 = sum1 = _mm_set_ps(0,0,0,0);
+
+      for (k = kernel.width-1 ; k >= 0 ; k--) {
+	__m128 coeff;
+	coeff = _mm_load1_ps(&kernel.data[k]);
+
+	_mm_prefetch(&in[32], _MM_HINT_NTA);
+	sum0 += _mm_load_ps(&in[0]) * coeff;
+	sum1 += _mm_load_ps(&in[4]) * coeff;
+	in += ncols;
+      }
+
+      _mm_stream_ps(&imgout->data[outidx+0], sum0);
+      _mm_stream_ps(&imgout->data[outidx+4], sum1);
+      outidx += 8;
+#else  /* !USE_SSE */
+    /* This should be vectorizable so that the unrolled sum[0-3]
+       calculations are done in parallel. */
+    for (i = 0 ; i < ncols ; i += 4)  {
+      int ppidx = (j-radius)*ncols + i;
+      float sum0, sum1, sum2, sum3;
+      sum0 = sum1 = sum2 = sum3 = 0.f;
+
+      for (k = kernel.width-1 ; k >= 0 ; k--) {
+	float coeff = kernel.data[k];
+        sum0 += imgin->data[ppidx+0] * coeff;
+        sum1 += imgin->data[ppidx+1] * coeff;
+        sum2 += imgin->data[ppidx+2] * coeff;
+        sum3 += imgin->data[ppidx+3] * coeff;
+	ppidx += ncols;
+      }
+      
+      imgout->data[outidx+0] = sum0;
+      imgout->data[outidx+1] = sum1;
+      imgout->data[outidx+2] = sum2;
+      imgout->data[outidx+3] = sum3;
+      outidx += 4;
+#endif	/* USE_SSE */
+#endif	/* __OPTIMIZE__ */
+    }
+  }
+  /* Zero bottom */
+  for (i = 0; i < ncols*radius; i++)
+    imgout->data[outidx++] = 0.0;
+
+#endif
 }
 
 
