@@ -20,12 +20,12 @@
 
 #include <valgrind/valgrind.h>
 
+#include "Camera.h"
+#include "DC1394Camera.h"
 #include "DrawnFeature.h"
 #include "VaultOfHeaven.h"
 #include "FeatureSet.h"
 #include "Feature.h"
-#include "Camera.h"
-#include "DC1394Camera.h"
 #include "Geom.h"
 #include "misc.h"
 
@@ -1391,7 +1391,7 @@ int main(int argc, char **argv)
 		printf("opening %s...\n", argv[optind]);
 		cam = new FileCamera(argv[optind]);
 	} else {
-		Camera::framesize_t size = RUNNING_ON_VALGRIND ? Camera::QSIF : Camera::SIF;
+		Camera::framesize_t size = RUNNING_ON_VALGRIND ? Camera::QSIF : Camera::VGA;
 		int fps = RUNNING_ON_VALGRIND ? 15 : 30;
 
 		cam = new DC1394Camera(size, fps);
