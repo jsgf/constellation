@@ -39,8 +39,8 @@ void _KLTToFloatImage(
   int ncols, int nrows,
   _KLT_FloatImage floatimg)
 {
-  KLT_PixelType *ptrend = img + ncols*nrows;
-  float *ptrout = floatimg->data;
+  int size = ncols*nrows;
+  int i;
 
   /* Output image must be large enough to hold result */
   assert(floatimg->ncols >= ncols);
@@ -49,7 +49,8 @@ void _KLTToFloatImage(
   floatimg->ncols = ncols;
   floatimg->nrows = nrows;
 
-  while (img < ptrend)  *ptrout++ = (float) *img++;
+  for(i = 0; i < size; i++)
+    floatimg->data[i] = (float)img[i];
 }
 
 
@@ -139,9 +140,10 @@ static void _convolveImageHoriz(
   ConvolutionKernel kernel,
   _KLT_FloatImage imgout)
 {
-  float *ptrrow = imgin->data;           /* Points to row's first pixel */
-  register float *ptrout = imgout->data, /* Points to next output pixel */
-    *ppp;
+  int rowidx = 0;           /* Points to row's first pixel */
+  int outidx = 0;
+  int ppidx;
+  
   register float sum;
   register int radius = kernel.width / 2;
   register int ncols = imgin->ncols, nrows = imgin->nrows;
@@ -162,22 +164,23 @@ static void _convolveImageHoriz(
 
     /* Zero leftmost columns */
     for (i = 0 ; i < radius ; i++)
-      *ptrout++ = 0.0;
+      imgout->data[outidx++] = 0.0;
 
     /* Convolve middle columns with kernel */
     for ( ; i < ncols - radius ; i++)  {
-      ppp = ptrrow + i - radius;
+      ppidx = rowidx + i - radius;
       sum = 0.0;
       for (k = kernel.width-1 ; k >= 0 ; k--)
-        sum += *ppp++ * kernel.data[k];
-      *ptrout++ = sum;
+        sum += imgin->data[ppidx++] * kernel.data[k];
+      
+      imgout->data[outidx++] = sum;
     }
 
     /* Zero rightmost columns */
     for ( ; i < ncols ; i++)
-      *ptrout++ = 0.0;
+      imgout->data[outidx++] = 0.0;
 
-    ptrrow += ncols;
+    rowidx += ncols;
   }
 }
 
@@ -191,9 +194,9 @@ static void _convolveImageVert(
   ConvolutionKernel kernel,
   _KLT_FloatImage imgout)
 {
-  float *ptrcol = imgin->data;            /* Points to row's first pixel */
-  register float *ptrout = imgout->data,  /* Points to next output pixel */
-    *ppp;
+  int colidx = 0;
+  int outidx = 0;
+  int ppidx;
   register float sum;
   register int radius = kernel.width / 2;
   register int ncols = imgin->ncols, nrows = imgin->nrows;
@@ -214,30 +217,30 @@ static void _convolveImageVert(
 
     /* Zero topmost rows */
     for (j = 0 ; j < radius ; j++)  {
-      *ptrout = 0.0;
-      ptrout += ncols;
+      imgout->data[outidx] = 0.0;
+      outidx += ncols;
     }
 
     /* Convolve middle rows with kernel */
     for ( ; j < nrows - radius ; j++)  {
-      ppp = ptrcol + ncols * (j - radius);
+      ppidx = colidx + ncols * (j - radius);
       sum = 0.0;
       for (k = kernel.width-1 ; k >= 0 ; k--)  {
-        sum += *ppp * kernel.data[k];
-        ppp += ncols;
+        sum += imgin->data[ppidx] * kernel.data[k];
+        ppidx += ncols;
       }
-      *ptrout = sum;
-      ptrout += ncols;
+      imgout->data[outidx] = sum;
+      outidx += ncols;
     }
 
     /* Zero bottommost rows */
     for ( ; j < nrows ; j++)  {
-      *ptrout = 0.0;
-      ptrout += ncols;
+      imgout->data[outidx] = 0.;
+      outidx += ncols;
     }
 
-    ptrcol++;
-    ptrout -= nrows * ncols - 1;
+    colidx++;
+    outidx -= nrows * ncols - 1;
   }
 }
 
