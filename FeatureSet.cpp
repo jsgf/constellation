@@ -6,9 +6,6 @@ extern "C" {
 #include <klt.h>
 }
 
-static const int HIGH_TURNOVER = 5;
-static const int HOLDOFF = 10;
-
 FeatureSet_Base::FeatureSet_Base(int maxFeatures, int minFeatures)
 {
 	klt_tc_ = KLTCreateTrackingContext();
@@ -35,7 +32,7 @@ void FeatureSet_Base::setNumFeatures(int min, int max)
 		if (features_[i] != NULL)
 			removeFeature(features_[i]);
 
-	if (klt_fl_ == NULL)
+	if (klt_fl_ != NULL)
 		KLTFreeFeatureList(klt_fl_);
 	klt_fl_ = KLTCreateFeatureList(max);
 

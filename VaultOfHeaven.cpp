@@ -5,6 +5,7 @@
 #include <string>
 #include <fstream>
 #include <iterator>
+#include "misc.h"
 
 using namespace std;
 
@@ -48,18 +49,23 @@ VaultOfHeaven::~VaultOfHeaven()
 
 void VaultOfHeaven::clear()
 {
+	for(StarMap_t::iterator it = starmap_.begin();
+	    it != starmap_.end();
+	    it++)
+		it->second = 0;
+
 	for(ConstellationSet_t::iterator it = constellations_.begin();
 	    it != constellations_.end();
 	    it++)
 		delete(*it);
 
-	starmap_.clear();
 	constellations_.clear();
 }
 
 void VaultOfHeaven::addStar(DrawnFeature *f)
 {
-	stars_.insert(f);
+	assert(starmap_.count(f) == 0);
+	starmap_[f] = 0;
 }
 
 void VaultOfHeaven::removeConstellation(Constellation *c)
@@ -70,7 +76,8 @@ void VaultOfHeaven::removeConstellation(Constellation *c)
 	    it != starmap_.end();
 	    it++)
 		if (starmap_[it->first] == c)
-			starmap_.erase(it->first);
+			starmap_[it->first] = 0;
+
 	constellations_.erase(c);
 	delete c;
 }
@@ -80,12 +87,11 @@ void VaultOfHeaven::removeStar(Star *f)
 	if (starmap_.count(f) != 0) {
 		Constellation *c = starmap_[f];
 
-		if (c->removeStar(f))
+		if (c && c->removeStar(f))
 			removeConstellation(c);
 
 		starmap_.erase(f);
 	}
-	stars_.erase(f);
 }
 
 void VaultOfHeaven::draw() const
@@ -98,15 +104,18 @@ void VaultOfHeaven::draw() const
 
 bool VaultOfHeaven::addConstellation()
 {
-	const vector<const Star *> v(stars_.begin(), stars_.end());
+	const vector<StarConst_t> v(starmap_.begin(), starmap_.end());
 
 	const Star *prev = NULL;
-	int limit = v.size() * 2;
+	unsigned limit = v.size();
 
 	while(limit--) {
-		prev = v[rand() % v.size()];
-		if (prev && starmap_.count(prev) == 0)
+		const StarConst_t &p = v[rand() % v.size()];
+
+		if (p.second == 0) {
+			prev = p.first;
 			break;
+		}
 	}
 
 	if (prev == NULL) {
@@ -129,7 +138,7 @@ bool VaultOfHeaven::addConstellation()
 		for(Star::DrawnFeatureSet_t::const_iterator it = next.begin();
 		    it != next.end();
 		    it++) {
-			if (starmap_.count(*it) != 0 && starmap_[*it] != c)
+			if (starmap_[*it] != 0 && starmap_[*it] != c)
 				continue;
 
 			sum += (*it)->val();
@@ -143,7 +152,7 @@ bool VaultOfHeaven::addConstellation()
 		for(Star::DrawnFeatureSet_t::const_iterator it = next.begin();
 		    it != next.end();
 		    it++) {
-			if (starmap_.count(*it) != 0 && starmap_[*it] != c)
+			if (starmap_[*it] != 0 && starmap_[*it] != c)
 				continue;
 
 			if (r < sum) {
@@ -178,8 +187,6 @@ VaultOfHeaven::Constellation::Constellation(const string &name)
 {
 }
 
-void drawString(float x, float y, const char *fmt, ...);
-
 void VaultOfHeaven::Constellation::draw() const
 {
 	float cx, cy;
@@ -194,44 +201,58 @@ void VaultOfHeaven::Constellation::draw() const
 	cx = cy = 0;
 	count = 0;
 
-	for(StarGraph_t::EdgeMap_t::const_iterator it = stars_.begin();
+	for(StarPairSet_t::const_iterator it = stars_.begin();
 	    it != stars_.end();
 	    it++) {
 		cx += it->first->x();
 		cy += it->first->y();
 		count++;
 
-		for(StarGraph_t::VertexSet_t::const_iterator vi = it->second.begin();
-		    vi != it->second.end();
-		    vi++) {
-			glVertex2f(it->first->x(), it->first->y());
-			glVertex2f((*vi)->x(), (*vi)->y());
-		}
+		glVertex2f(it->first->x(), it->first->y());
+		glVertex2f(it->second->x(), it->second->y());
 	}
 
 	glEnd();
 
 	cx /= count;
 	cy /= count;
-	drawString(cx, cy, name_.c_str());
+	drawString(cx, cy, JustLeft, name_.c_str());
 
 	glPopAttrib();
 }
 
 void VaultOfHeaven::Constellation::addStars(const Star *a, const Star *b)
 {
-	printf("a=%p b=%p\n", a, b);
+	if (0)
+		printf("adding a=%p b=%p\n", a, b);
 	assert(a != NULL);
 	assert(b != NULL);
-	//assert(a->neighbours().count(b) != 0);
-	//assert(b->neighbours().count(a) != 0);
+	// if a is a neighbour of b, then b should be a neighbour of a
+	assert(a->neighbours().count(b) != 0);
+	assert(b->neighbours().count(a) != 0);
 
-	stars_.insert(a, b);
+	StarPair_t p(a, b);
+
+	if (stars_.count(p) == 0)
+		stars_.insert(p);
+	else if (0)
+		printf("  duplicate\n");
 }
 
 bool VaultOfHeaven::Constellation::removeStar(const Star *a)
 {
-	stars_.erase(a);
+	if (0)
+		printf("removing star %p\n", a);
+	fflush(stdout);
+
+	for(StarPairSet_t::iterator it = stars_.begin();
+	    it != stars_.end();
+	    it++)
+		if (*it == a) {
+			if (0)
+				printf("  removing %p-%p\n", it->first, it->second);
+			stars_.erase(it);
+		}
 
 	return stars_.size() < minConst;
 }

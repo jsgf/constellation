@@ -6,20 +6,44 @@
 #include <map>
 #include <string>
 
-#include "Graph.h"
-
 class DrawnFeature;
+
+// Rearrange a pair of objects into a canonical order, so that
+// pair<a,b> == pair<b,a>
+template <typename T>
+class unordered_pair: public std::pair<T,T>
+{
+public:
+	unordered_pair(T &a, T &b)
+		: std::pair<T,T>(a < b ? a : b, a < b ? b : a)
+		{}
+	virtual ~unordered_pair() {}
+
+};
+
+template<typename T>
+bool operator==(const unordered_pair<T> a, const T &b) {
+	return b == a.first || b == a.second;
+}
+
+template<typename T>
+bool operator!=(const unordered_pair<T> a, const T &b) {
+	return !(b == a.first || b == a.second);
+}
 
 class VaultOfHeaven {
 	typedef DrawnFeature Star;
 
-	static const int minConst = 3;
+	static const unsigned minConst = 3;
 
 	class Constellation {
 	public:
-		typedef Graph<const Star *> StarGraph_t;
+		typedef unordered_pair<const Star *> StarPair_t;
+		typedef std::set<StarPair_t> StarPairSet_t;
+
 	private:
-		StarGraph_t	stars_;
+		StarPairSet_t		stars_;
+		
 		const std::string	&name_;
 
 	public:
@@ -30,19 +54,15 @@ class VaultOfHeaven {
 		void addStars(const Star *, const Star *);
 		bool removeStar(const Star *);
 
-		StarGraph_t::EdgeMap_t::const_iterator begin() { return stars_.begin(); }
-		StarGraph_t::EdgeMap_t::const_iterator end() { return stars_.begin(); }
-		StarGraph_t::EdgeMap_t edges() { return stars_.edges(); }
-
-		int size() const { return stars_.size(); }
+		unsigned size() const { return stars_.size(); }
 	};
 
-	typedef std::set<const Star *> FeatureSet_t;
+	typedef std::pair<const Star *, Constellation *> StarConst_t;
 	typedef std::map<const Star *, Constellation *> StarMap_t;
 	typedef std::set<Constellation *> ConstellationSet_t;
 
-	FeatureSet_t	stars_;		// all stars
-	StarMap_t	starmap_;	// stars in constellations
+	StarMap_t	starmap_;	// stars, and what
+					// constellation each is in
 
 	ConstellationSet_t	constellations_;
 

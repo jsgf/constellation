@@ -16,12 +16,15 @@
 #include <fstream>
 #include <fftw3.h>
 
+#include <valgrind/valgrind.h>
+
 #include "DrawnFeature.h"
 #include "VaultOfHeaven.h"
 #include "FeatureSet.h"
 #include "Feature.h"
 #include "Camera.h"
 #include "Geom.h"
+#include "misc.h"
 
 extern "C" {
 #include "klt.h"
@@ -29,22 +32,10 @@ extern "C" {
 
 static const int nFeatures = 80;
 
-#define GLERR() _glerr(__FILE__, __LINE__);
-
-static void _glerr(const char *file, int line)
-{
-	GLenum err = glGetError();
-
-	if (err != GL_NO_ERROR) {
-		printf("GL error at %s:%d: %s\n",
-		       file, line, (char *)gluErrorString(err));
-	}
-}
-
 static Camera *cam;
 static GLuint imagetex;
 static GLuint startex;
-static int bordermode = 1;	// 0, 1, 2
+static int bordermode = 0;	// 0, 1, 2
 static bool antishake = false;
 static bool tracking = true;
 static int histo = 0;		// 0, 1, 2
@@ -55,23 +46,10 @@ static int markers = 1;		// show markers 0, 1, 2
 static bool warp = false;
 static bool paused = false;
 static bool capture = false;
+static bool autoconst = false;
+
 
 static VaultOfHeaven heaven;
-
-void drawString(float x, float y, const char *fmt, ...)
-{
-	char buf[1000];
-	va_list ap;
-
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-
-	glRasterPos2f(x, y);
-
-	for(char *cp = buf; *cp; cp++)
-		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *cp);
-}
 
 
 class DrawnFeatureSet: public FeatureSet<DrawnFeature>
@@ -358,8 +336,7 @@ void DrawnFeature::draw() const
 			glVertex2f(x_, y_);
 			glEnd();
 		}
-	}
-	if (markers == 2) {
+
 		glBegin(GL_LINE_LOOP);
 			glVertex2f(x_ - dx, y_ - dy);
 			glVertex2f(x_ + dx, y_ - dy);
@@ -383,7 +360,13 @@ void DrawnFeature::draw() const
 		glBindTexture(GL_TEXTURE_2D, startex);
 		GLERR();
 
-		glColor4f(1, 1, 1, 1);
+		if (state_ == New) {
+			float c = (float)age_ / Adulthood;
+
+			glColor4f(c, c, c, c);
+		} else
+			glColor4f(1, 1, 1, 1);
+
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -472,7 +455,8 @@ static void drawborder()
 		glVertex2f(ox + 5 , oy - 5);
 		glEnd();
 
-		drawString(cx-10, cy-10, "(%.2f,%.2f)", features.off_x(), features.off_y());
+		drawString(cx, cy-10, JustCentre,
+			   "(%.2f,%.2f)", features.off_x(), features.off_y());
 
 		GLERR();
 	} else if (bordermode == 2) {
@@ -503,6 +487,9 @@ static void drawborder()
 
 void drawimage(const unsigned char *img, float deltax, float deltay)
 {
+	if (RUNNING_ON_VALGRIND)
+		return;
+
 	glMatrixMode(GL_MODELVIEW);
 	glPushMatrix();
 	glTranslatef(-deltax, -deltay, 0);
@@ -531,9 +518,10 @@ void drawimage(const unsigned char *img, float deltax, float deltay)
 	glEnable(GL_TEXTURE_2D);
 	glDisable(GL_BLEND);
 
-	glColor4f(1, 1, 1, 1);
-	if (heaven.nConstellations() > 0)
+	if (markers == 1)
 		glColor4f(.5, .5, .5, .5);
+	else
+		glColor4f(1, 1, 1, 1);
 
 	glShadeModel(GL_SMOOTH);
 	
@@ -616,8 +604,8 @@ static void drawhisto(const unsigned char *img, int pixcount)
 	glVertex2i(peak, 256);
 	glEnd();
 
-	drawString(peak+1, 1, "%d", peak);
-	drawString(2, 240, histo == 1 ? "Linear" : "Log");
+	drawString(peak+1, 1, JustLeft, "%d", peak);
+	drawString(2, 240, JustLeft, histo == 1 ? "Linear" : "Log");
 
 }
 
@@ -906,6 +894,10 @@ static void display(void)
 	drawborder();
 
 	// draw the constellations
+	if (autoconst) {
+		features.reTriangulate();
+		heaven.addConstellation();
+	}
 	heaven.draw();
 
 	// more tracking
@@ -949,7 +941,7 @@ static void display(void)
 	prev = now;
 
 	glColor3f(1, 1, 0);
-	drawString(10, cam->imageHeight() - 12,
+	drawString(10, cam->imageHeight() - 12, JustLeft,
 		   "Frame time: %3dms; %2d fps; %2d/%d active features", 
 		   delta, 1000 / framedelta, active, nFeatures);
 	
@@ -1009,16 +1001,22 @@ static void keyboard(unsigned char ch, int, int)
 		paused = !paused;
 		break;
 
+	case 'a':
+		autoconst = !autoconst;
+		break;
+
 	case 'c':
 	{
 		const int limit = 10;
 		int i;
 
+		features.reTriangulate();
 		for(i = 0; i < limit; i++)
 			if (heaven.addConstellation())
 				break;
 		if (i == limit) {
 			heaven.clear();
+			features.reTriangulate();
 			heaven.addConstellation();
 		}
 		break;
@@ -1078,7 +1076,10 @@ static void reshape(int w, int h)
 
 int main()
 {
-	cam = new Camera(Camera::SIF, 30);
+	if (0 && RUNNING_ON_VALGRIND)
+		cam = new Camera(Camera::QSIF, 10);
+	else
+		cam = new Camera(Camera::SIF, 30);
 	
 	glutInitWindowSize(cam->imageWidth(), cam->imageHeight());
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
@@ -1105,14 +1106,15 @@ int main()
 	GLERR();
 
 	{
-		unsigned char star[256*256];
+		static const int SIZE = 64;
+		unsigned char star[SIZE*SIZE];
 		int fd = open("star.raw", O_RDONLY);
 		read(fd, star, sizeof(star));
 		close(fd);
 
 
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_INTENSITY,
-			     256, 256,
+			     SIZE, SIZE,
 			     0, GL_LUMINANCE, GL_UNSIGNED_BYTE, star);
 
 		GLERR();
