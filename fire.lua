@@ -1,15 +1,7 @@
-t = tracker.new(30, 40)
+require ("bokstd")
 
-features = {}
-
-function features.foreach(self, func)
-   for i in self do
-      if type(i) == 'number' then
-	 p = features[i]
-	 p[func](p)
-      end
-   end
-end
+maxpoints=50
+t = tracker.new(maxpoints/2, maxpoints)
 
 -- particles which need per-frame update
 particles = {}
@@ -20,9 +12,24 @@ render_add = {}
 -- particles which need alpha blending
 render_alpha = {}
 
+function add_particle(p, render)
+   particles[p] = p
+   if render then
+      render[p] = p
+   end
+end
+
+function del_particle(p)
+   particles[p] = nil
+   render_add[p] = nil
+   render_alpha[p] = nil
+end
+
 star = gfx.texture('star-la.png')
 blob = gfx.texture('blob.png')
+bscale = star.width / blob.width
 smoke = gfx.texture('smoke.png')
+sscale = star.width / smoke.width
 
 breeze=0
 
@@ -30,15 +37,21 @@ breeze=0
 function flamept()
 end
 
+smokers=0
 -- create a smoke particle
 function smokept(x, y, intens)
    local pt = { x=x, y=y, intens=intens, age=0 }
    local maxage = 100
 
    function pt.draw(self)
+      local minscale = 2
       local scale = self.age / 10
       local b = (maxage-self.age) / (maxage*20)
       b = b * self.intens
+      if scale < minscale then
+	 b = b * (scale/minscale)
+	 scale = minscale
+      end
 
       gfx.setstate({colour={b, b, b, b}})
       gfx.sprite(blob, self.x, self.y, scale)
@@ -47,9 +60,11 @@ function smokept(x, y, intens)
    function pt.update(self)
       self.age = self.age + 1
 
-      if self.age > maxage or self.intens < .01 then
-	 particles[self] = nil
-	 render_alpha[self] = nil
+      if self.age > maxage or
+	 self.intens < .2 or
+	 self.y < 0 then
+	 smokers = smokers-1
+	 del_particle(self)
       end
 
       self.y = self.y - 5
@@ -59,8 +74,9 @@ function smokept(x, y, intens)
    end
 
    --register
-   particles[pt] = pt
-   render_alpha[pt] = pt
+   add_particle(pt, render_alpha)
+
+   smokers=smokers+1
 end
 
 -- create floating spark
@@ -69,22 +85,6 @@ end
 
 -- create a ballistic spark
 function spitpt()
-end
-
-function lerpcol(p, c1, c2)
-   function lerp(p, v1, v2)
-      if v1 == nil or v2 == nil then
-	 return nil
-      else
-	 return v1 + (v2-v1) * p
-      end
-   end
-   return { 
-      lerp(p, c1[1], c2[1]),
-      lerp(p, c1[2], c2[2]),
-      lerp(p, c1[3], c2[3]),
-      lerp(p, c1[4], c2[4])
-   }
 end
 
 --color transition; gimp "incandescent" gradient
@@ -98,37 +98,6 @@ incandescent =  {
    { .947, { .974, .953, .450 } },
    { 1, { .976, .968, .822 } },
 }
-
--- return a colour{} for a particular temp
--- temp is arbitrary scale, erm, let's say 0..1
-function gradient(cols, temp)
-   local pw, pc			--prev values
-
-   -- This could probably be a binary search or something, if it
-   -- seemed worthwhile
-   for _,col in cols do
-      local w,c = unpack(col)	--weight, colour
-
-      if pw then
-	 -- if temp is between this entry and the previous, then
-	 -- interpolate it
-	 if temp > pw and temp <= w then
-	    local p = (temp - pw) / (w-pw)
-	    return lerpcol(p, pc, c)
-	 end
-      else
-	 -- if temp is before the first entry, then just return the
-	 -- first entry
-	 if temp <= w then
-	    return c
-	 end
-      end
-      pw,pc = w,c
-   end
-
-   -- if we ran out of list, just return the last colour
-   return pc
-end
 
 --[[
 A feature being tracked by the tracker
@@ -150,23 +119,30 @@ function trackpoint(x, y, weight)
       age=0, active=true
    }
 
+   -- Drawing size and colour are functions of the particles oxygen.
    function pt.draw(self)
       local logO2 = math.log(self.o2)
       local scale = logO2 / 50
       local temp = logO2 / 10
 
-      temp = temp < 0 and 0 or temp	-- clamp
+      temp = clamp(temp, 0, temp)
       
+      -- if the scale is too small, then clamp, and a
+      -- flickering ember effect
       if scale < .05 then
 	 scale = .05
-	 temp = temp + (math.random() * .75)	-- add flicker
+	 temp = temp + (math.random() * .5)	-- add flicker
       end
 
       --print('o2=',self.o2,'scale=',scale, 'temp=',temp)
+
+      -- set the colour depending on the temperature
       gfx.setstate({colour=gradient(incandescent, temp)})
-      gfx.sprite(star, self.x, self.y, scale)
+      gfx.sprite(blob, self.x, self.y, scale * bscale)
    end
 
+   -- Movement is simple; it just keeps track of the previous
+   -- position, and adds the delta into the average
    function pt.move(self, x, y)
       self.px, self.py = self.x, self.y
       self.x, self.y = x, y
@@ -176,17 +152,27 @@ function trackpoint(x, y, weight)
       average.y = average.y + dy
    end
 
+   --[[ 
+   The point may be active or lost; active is when it is being
+   driven by the tracker.  Lost means that it is clearing up.
+   Each timestep, the o2 level is reduced by 25%.  If active, then
+   the distance^2 moved since the last frame is used to add to the
+   particle\'s O2 level.  If the particle is still immature, then
+   O2 is accumulated depending on its initial weight.  The amount
+   of smoke depends on the o2 level too. ]]
    function pt.update(self)
-      self.o2 = self.o2 * .5	-- die off a bit
+      self.o2 = self.o2 * .75	-- die off a bit
       
       if self.active then
 	 local dx = self.x-self.px
 	 local dy = self.y-self.py
 	 
-	 -- remove overall motion to separate background from
-	 -- foreground
-	 dx = dx - average.x
-	 dy = dy - average.y
+	 if false then
+	    -- remove overall motion to separate background from
+	    -- foreground
+	    dx = dx - average.x
+	    dy = dy - average.y
+	 end
 
 	 local delta = dx*dx+dy*dy
 
@@ -197,7 +183,12 @@ function trackpoint(x, y, weight)
 	 if self.age < mature then
 	    self.o2 = self.o2 + self.weight/mature
 	 end
-	 if math.random() > (self.o2 / 100) then
+
+	 -- This is interestingly wrong.  The original intent was that
+	 -- the smoke level be proportional to the o2 level.  This code
+	 -- gets it wrong, but the effect is to only generate smoke when
+	 -- the point is guttering, which looks better.
+	 if math.random() > (self.o2 / 70) then
 	    smokept(self.x, self.y, self.o2)
 	 end
 
@@ -207,8 +198,7 @@ function trackpoint(x, y, weight)
       -- Remove from particle set if we've run out of oxygen (has no
       -- effect its still part of the feature set)
       if self.o2 < .01 then
-	 particles[self] = nil
-	 render_add[self] = nil
+	 del_particle(self)
       end
    end
 
@@ -216,9 +206,10 @@ function trackpoint(x, y, weight)
       if why ~= 'oob' then
 	 -- Tracker lost this feature.  Turn it into a particle to
 	 -- just fade away
-	 self.active = false
-	 particles[self] = self
-	 render_add[self] = self
+	 if false then
+	    self.active = false
+	    add_particle(self, render_add)
+	 end
       end
    end
 
@@ -235,8 +226,8 @@ function process_frame()
    average={x=average.x / t.active, y=average.y / t.active}
 
    --print(string.format('average=%g, %g', average.x, average.y))
-
-   breeze = breeze + math.random() - .5
+   print("smokers=",smokers)
+   breeze = clamp(breeze + math.random() - .5, -5, 5)
 
    features:foreach('update')
    

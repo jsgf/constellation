@@ -340,21 +340,22 @@ static void drawimage(const unsigned char *img)
 	glEnable(GL_TEXTURE_2D);
 	glDisable(GL_BLEND);
 
-	glColor4f(1, 1, 1, 1);
 
 	glShadeModel(GL_SMOOTH);
 	
 	// draw tinted image
+	glColor4f(1, 1, 1, 1);	
+	glColor4f(.75, .75, .75, 2);
 	
 	glBegin(GL_QUADS);
-	//glColor4f(.04, .07, .51, 0); // zenith
+	//glColor4f(.04, .07, .51, 1); // zenith
 	glTexCoord2i(0, 0);
 	glVertex2i(0, 0);
 
 	glTexCoord2i(cam->imageWidth(), 0);
 	glVertex2i(cam->imageWidth(), 0);
 
-	//glColor4f(0, .58, .99, 0); // horizon
+	//glColor4f(0, .58, .99, 1); // horizon
 	glTexCoord2i(cam->imageWidth(), cam->imageHeight());
 	glVertex2i(cam->imageWidth(), cam->imageHeight());
 
