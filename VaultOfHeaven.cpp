@@ -107,7 +107,7 @@ bool VaultOfHeaven::addConstellation()
 	const vector<StarConst_t> v(starmap_.begin(), starmap_.end());
 
 	const Star *prev = NULL;
-	unsigned limit = v.size();
+	unsigned limit = v.size() / 2;
 
 	while(limit--) {
 		const StarConst_t &p = v[rand() % v.size()];
@@ -174,7 +174,7 @@ bool VaultOfHeaven::addConstellation()
 	constellations_.insert(c);
 
 	if (c->size() < minConst) {
-		printf("constellation stillborn: %d\n", c->size());
+		//printf("constellation stillborn: %d\n", c->size());
 		removeConstellation(c);
 		return false;
 	}

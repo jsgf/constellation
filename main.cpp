@@ -1080,12 +1080,21 @@ int main()
 		cam = new Camera(Camera::QSIF, 10);
 	else
 		cam = new Camera(Camera::SIF, 30);
-	
-	glutInitWindowSize(cam->imageWidth(), cam->imageHeight());
-	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
 
-	glutCreateWindow("Constellation");
-	
+	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
+	//glutGameModeString("1024x768:32");
+	glutGameModeString("640x480:32@60");
+
+	if (0 && glutGameModeGet(GLUT_GAME_MODE_POSSIBLE))
+		glutEnterGameMode();
+	else {
+		printf("no game mode\n");
+
+		glutInitWindowSize(cam->imageWidth(), cam->imageHeight());
+		glutCreateWindow("Constellation");
+		glutFullScreen();
+	}
+
 	glutDisplayFunc(display);
 	glutReshapeFunc(reshape);
 	glutKeyboardFunc(keyboard);

@@ -80,3 +80,6 @@ The Erroneous Message
 Wrong
 Right
 The Haiku
+The Default
+The Detailed Devil
+The Failure Mode
