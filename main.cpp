@@ -565,23 +565,21 @@ void drawimage(const unsigned char *img, float deltax, float deltay)
 	glEnable(GL_TEXTURE_2D);
 	glDisable(GL_BLEND);
 
-	if (0 && markers == 1) {
-		// make it sky-ish when drawing stars
-		glColor4f(.3, .4, .8, 1);
-	} else
-		glColor4f(1, 1, 1, 1);
+	glColor4f(1, 1, 1, 1);
 
 	glShadeModel(GL_SMOOTH);
 	
 	glBegin(GL_QUADS);
-	glColor4f(0, .58, .99, 0);
+	if (markers == 1)
+		glColor4f(0, .58, .99, 0);
 	glTexCoord2i(0, 0);
 	glVertex2i(0, 0);
 
 	glTexCoord2i(cam->imageWidth(), 0);
 	glVertex2i(cam->imageWidth(), 0);
 
-	glColor4f(.04, .07, .51, 0);
+	if (markers == 1)
+		glColor4f(.04, .07, .51, 0);
 	glTexCoord2i(cam->imageWidth(), cam->imageHeight());
 	glVertex2i(cam->imageWidth(), cam->imageHeight());
 
@@ -1283,7 +1281,8 @@ int main()
 
 	
 	SDL_WM_SetCaption("Constellation", "Constellation");
-	
+	SDL_ShowCursor(0);
+
 	reshape(640, 480);
 
 	glGenTextures(1, &imagetex);
@@ -1320,5 +1319,8 @@ int main()
 	for(;;) {
 		handle_events();
 		display();
+
+		if (autoconst && random() < (RAND_MAX/1000))
+			heaven.clear();
 	}
 }

@@ -200,6 +200,7 @@ void drawString(float x, float y, Justify just, const char *fmt, ...)
 	glEnable(GL_TEXTURE_2D);
 
 	glMatrixMode(GL_TEXTURE);
+	glPushMatrix();
 	glLoadIdentity();
 	glMatrixMode(GL_MODELVIEW);
 
@@ -237,4 +238,8 @@ void drawString(float x, float y, Justify just, const char *fmt, ...)
 
 	glDisable(GL_BLEND);	
 	glDisable(GL_TEXTURE_2D);
+
+	glMatrixMode(GL_TEXTURE);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
 }
