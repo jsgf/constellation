@@ -16,6 +16,8 @@
 #include <fstream>
 #include <fftw3.h>
 
+#include <zlib.h>
+
 #include <valgrind/valgrind.h>
 
 #include "DrawnFeature.h"
@@ -47,12 +49,41 @@ static bool warp = false;
 static bool paused = false;
 static bool capture = false;
 static bool autoconst = false;
-static bool record = false;
+static gzFile recordfile = NULL;
 
 static int screen_w, screen_h;
 
 static VaultOfHeaven heaven;
 
+static int newfile(const char *base, const char *ext)
+{
+	int fd;
+	int count = 0;
+	char buf[strlen(base)+strlen(ext)+4+1+1];
+
+	while(count < 10000) {
+		sprintf(buf, "%s%04d%s", base, count++, ext);
+		fd = open(buf, O_CREAT|O_EXCL|O_WRONLY, 0660);
+		if (fd == -1) {
+			if (errno == EEXIST)
+				continue;
+			else
+				return -1;
+		} else
+			return fd;
+	}
+
+	errno = EEXIST;
+	return -1;
+}
+
+static void atexit_closerecord(void)
+{
+	if (recordfile) {
+		gzclose(recordfile);
+		recordfile = NULL;
+	}
+}
 
 class DrawnFeatureSet: public FeatureSet<DrawnFeature>
 {
@@ -838,26 +869,13 @@ static void display(void)
 
 	// image capture to pgm file
 	if (capture) {
-		static int count;
 		char buf[100];
-		int fd;
 		FILE *fp = NULL;
 
-		for(;;) {
-			sprintf(buf, "capture%04d.pgm", count++);
-			fd = open(buf, O_CREAT|O_EXCL|O_WRONLY, 0660);
-			if (fd == -1) {
-				if (errno == EEXIST)
-					continue;
-				else {
-					printf("capture of %s failed: %s\n",
-					       buf, strerror(errno));
-				}
-			} else {
-				fp = fdopen(fd, "wb");
-				break;
-			}
-		}
+		int fd = newfile("capture", ".pgm");
+
+		if (fd != -1)
+			fp = fdopen(fd, "wb");
 
 		if (fp != NULL) {
 			fprintf(fp, "P5\n%d %d 255\n",
@@ -947,7 +965,7 @@ static void display(void)
 		   "Frame time: %3dms; %2d fps; %2d/%d active features", 
 		   delta, 1000 / framedelta, active, nFeatures);
 	
-	if (record) {
+	if (recordfile) {
 		unsigned char *pix = new unsigned char [screen_w * screen_h * 3];
 		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 		glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -956,26 +974,19 @@ static void display(void)
 			     GL_RGB, GL_UNSIGNED_BYTE,
 			     pix);
 
-		static FILE *recording = NULL;
-
-		if (recording == NULL) {
-			recording = fopen("record.ppm", "wb");
-
-			if (recording == NULL) 
-				perror("fopen failed");
-		}
+		int rows = screen_h & ~1; // even for mpeg
 		
-		if (recording != NULL) {
-			int rows = screen_h & ~1; // even for mpeg
+		char hdr[100];
 
-			fprintf(recording, "P6\n%d %d 255\n", screen_w, rows);
-			int wb = screen_w * 3;
+		snprintf(hdr, sizeof(hdr), "P6\n%d %d 255\n", screen_w, rows);
+		gzwrite(recordfile, hdr, strlen(hdr));
 
-			for (int r = rows - 1; r >= 0; r--)
-				fwrite(pix + (r * wb), wb, 1, recording);
-
-			fflush(recording);
-		}
+		int wb = screen_w * 3;
+		
+		for (int r = rows - 1; r >= 0; r--)
+			gzwrite(recordfile, pix + (r * wb), wb);
+		
+		gzflush(recordfile, Z_SYNC_FLUSH);
 
 		delete[] pix;
 	}
@@ -985,7 +996,32 @@ static void display(void)
 
 static void keyboard(unsigned char ch, int, int)
 {
+	static const struct size {
+		int w, h;
+	} sizes[] = {
+		{ 128,  96 },		// SQSIF
+		{ 160, 120 },		// QSIF
+		{ 176, 144 },		// QCIF
+		{ 320, 240 },		// SIF
+		{ 352, 288 },		// CIF
+		{ 640, 480 },		// VGA
+		{ 800, 600 },
+	};
+
 	switch(ch) {
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	{
+		int idx = ch - '1';
+		glutReshapeWindow(sizes[idx].w, sizes[idx].h);
+		break;
+	}
+
 	case 27:
 	case 'q':
 		exit(0);
@@ -1011,7 +1047,12 @@ static void keyboard(unsigned char ch, int, int)
 		break;
 
 	case 'r':
-		record = !record;
+		if (recordfile == NULL)
+			recordfile = gzdopen(newfile("record", ".ppm.gz"), "wb2");
+		else {
+			gzclose(recordfile);
+			recordfile = NULL;
+		}
 		break;
 
 	case 'h':
@@ -1122,6 +1163,8 @@ int main()
 		cam = new Camera(Camera::QSIF, 10);
 	else
 		cam = new Camera(Camera::SIF, 30);
+
+	atexit(atexit_closerecord);
 
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
 	//glutGameModeString("1024x768:32");

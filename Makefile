@@ -14,7 +14,10 @@ CXXFLAGS=-Wall -g -O -fno-inline $(PROF) -I$(KLT) -I$(CGAL)/include -I$(CGAL)/in
 all: constellation star.raw
 
 constellation: main.o Camera.o FeatureSet.o Feature.o VaultOfHeaven.o misc.o # Geom.o
-	$(CXX)  $(PROF) -o $@ $^ -lglut -lGL -L$(KLT) $(LIBKLT) -L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL -lfftw3
+	$(CXX)  $(PROF) -o $@ $^ -lglut -lGL -L$(KLT) $(LIBKLT) -L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL -lfftw3 -lz
+
+%.mpg: %.ppm.gz
+	zcat $< | ppmtoy4m | mpeg2enc -f 2 -q8 -o $@
 
 .deps:
 	mkdir .deps
