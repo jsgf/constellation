@@ -20,17 +20,116 @@ const Camera::sizeinfo Camera::sizeinfo_[] = {
 	{ 640, 480 },		// VGA
 };
 
-Camera::Camera(size_t size, int rate)
-	: size_(size), rate_(rate), fd_(-1), buf_(NULL), use_mmap_(false)
+Camera::Camera(Camera::framesize_t size, int rate)
+	: size_(size), rate_(rate), recfd_(-1)
 {
 }
 
 Camera::~Camera()
 {
+	stopRecord();
+}
+
+int Camera::imageSize() const
+{
+	return sizeinfo_[size_].width * sizeinfo_[size_].height;
+}
+
+void Camera::startRecord(int fd)
+{
+	stopRecord();
+
+	recfd_ = fd;
+
+	writeRecordHeader();
+}
+
+void Camera::stopRecord()
+{
+	if (recfd_ != -1) {
+		y4m_fini_stream_info(&stream_);
+		close(recfd_);
+		recfd_ = -1;
+	}
+}
+
+void Camera::writeRecordHeader()
+{
+	y4m_ratio_t framerate = { rate_, 1 };
+	y4m_ratio_t oneone = { 1, 1 };
+
+	y4m_init_stream_info(&stream_);
+
+	y4m_si_set_width (&stream_, sizeinfo_[size_].width);
+	y4m_si_set_height(&stream_, sizeinfo_[size_].height);
+	y4m_si_set_interlace(&stream_, Y4M_ILACE_NONE);
+	y4m_si_set_framerate(&stream_, framerate);
+	y4m_si_set_sampleaspect(&stream_, oneone);
+	
+	y4m_write_stream_header(recfd_, &stream_);
+}
+
+void Camera::writeFrame(const unsigned char *data)
+{
+	y4m_frame_info_t fi;
+
+	y4m_init_frame_info(&fi);
+
+	int ysz = sizeinfo_[size_].width * sizeinfo_[size_].height;
+	int uvsz = ysz / 4;
+
+	uint8_t *yuv[3];
+	yuv[0] = (uint8_t *)data;
+	yuv[1] = (uint8_t *)data + ysz;
+	yuv[2] = (uint8_t *)data + ysz + uvsz;
+	y4m_write_frame(recfd_, &stream_, &fi, yuv);
+
+	y4m_fini_frame_info(&fi);
+}
+
+const unsigned char *Camera::testpattern()
+{
+	extern unsigned char nbc_320[];
+	extern unsigned char Indian_Head_320[];
+	extern unsigned char tcf_sydney[];
+	static unsigned char *tests[] = {
+		nbc_320, Indian_Head_320, tcf_sydney,
+	};
+	stop();
+
+	size_ = SIF;
+	static unsigned char *tp = NULL;
+
+	stop();		// disable any use of camera
+
+	size_ = SIF;	// caller probably isn't expecting this
+
+	if (tp == NULL || (random() < (RAND_MAX / 1000)))
+		tp = tests[random() % (sizeof(tests)/sizeof(*tests))];
+
+	return tp;
+}
+
+
+
+V4LCamera::V4LCamera(Camera::framesize_t size, int rate)
+	: Camera(size, rate),
+	  fd_(-1), buf_(NULL), use_mmap_(false)
+{
+}
+
+V4LCamera::~V4LCamera()
+{
 	stop();
 }
 
-void Camera::start()
+int V4LCamera::imageSize() const
+{
+	// include Y and UV planes
+	return sizeinfo_[size_].width * (sizeinfo_[size_].height * 3 / 2);
+}
+
+void V4LCamera::start()
 {
 	struct video_capability caps;
 	struct video_picture pict;
@@ -109,8 +208,10 @@ void Camera::start()
 	failed_ = false;
 }
 
-void Camera::stop()
+void V4LCamera::stop()
 {
+	stopRecord();
+
 	if (fd_ != -1) {
 		close(fd_);
 		fd_ = -1;
@@ -126,43 +227,22 @@ void Camera::stop()
 	}
 }
 
-int Camera::imageSize() const
+
+const unsigned char *V4LCamera::getFrame()
 {
-	// include Y and UV planes
-	return sizeinfo_[size_].width * (sizeinfo_[size_].height * 3 / 2);
-}
+	unsigned char *ret;
 
-unsigned char *Camera::getFrame()
-{
-	if (failed_) {
-		extern unsigned char nbc_320[];
-		extern unsigned char Indian_Head[];
-		extern unsigned char tcf_sydney[];
-		static unsigned char *tests[] = {
-			nbc_320, Indian_Head, tcf_sydney,
-		};
-		static unsigned char *tp = NULL;
-
-		size_ = SIF;	// probably won't work
-
-		stop();		// disable any use of camera
-
-		if (tp == NULL || (random() < (RAND_MAX / 1000)))
-			tp = tests[random() % (sizeof(tests)/sizeof(*tests))];
-
-		return tp;
-	}
+	if (failed_)
+		return testpattern();
 
 	if (use_mmap_) {
-		unsigned char *ptr;
-
 		if (0)
 			printf("VIDIOCSYNC frame %u\n", mmap_nextframe_);
 		if (ioctl(fd_, VIDIOCSYNC, &mmap_nextframe_) == -1) {
 			failed_ = true;
 			perror("VIDIOSYNC failed");
 		}
-		ptr = frameptrs_[mmap_nextframe_];
+		ret = frameptrs_[mmap_nextframe_];
 		mmap_nextframe_ = (mmap_nextframe_ + 1) % mmap_frames_;
 
 		struct video_mmap vidmmap;
@@ -179,13 +259,110 @@ unsigned char *Camera::getFrame()
 			use_mmap_ = false;
 			buf_ = new unsigned char[imageSize()];
 		}
-
-		return ptr;
 	} else {
 		int r = read(fd_, buf_, imageSize());
 
 		if (r != imageSize())
 			failed_ = true;
-		return buf_;
+		ret = buf_;
 	}
+
+	if (recfd_ != -1)
+		writeFrame(ret);
+
+	return ret;
+}
+
+
+FileCamera::FileCamera(const char *file)
+	: Camera(QSIF, 10), 
+	  file_(file), fd_(-1)
+{
+}
+
+void FileCamera::start()
+{
+	fd_ = open(file_, O_RDONLY);
+
+	if (fd_ == -1) {
+		perror("FileCamera::start open");
+		return;
+	}
+
+	y4m_init_stream_info(&stream_);
+	int err = y4m_read_stream_header(fd_, &stream_);
+
+	if (err != Y4M_OK) {
+		printf("y4m_read_stream_header failed: %s\n", y4m_strerr(err));
+		stop();
+		return;
+	}
+
+	y4m_ratio_t framerate = y4m_si_get_framerate(&stream_);
+	rate_ = framerate.n / framerate.d;
+
+	int i;
+	for(i = 0; i < FRAMESIZE_MAX; i++) {
+		if (sizeinfo_[i].width == y4m_si_get_width(&stream_) &&
+		    sizeinfo_[i].height == y4m_si_get_height(&stream_))
+			break;
+	}
+
+	if (i == FRAMESIZE_MAX) {
+		stop();
+		return;
+	}
+	size_ = (framesize_t)i;
+
+	printf("y2m_si_get_framelength=%d imageSize()=%d\n",
+	       y4m_si_get_framelength(&stream_), imageSize());
+
+	buf_ = new unsigned char[y4m_si_get_framelength(&stream_)];
+}
+
+void FileCamera::stop()
+{
+	if (fd_ != -1) {
+		close(fd_);
+		fd_ = -1;
+		delete[] buf_;
+		buf_ = NULL;
+	}
+
+	y4m_fini_stream_info(&stream_);
+}
+
+int FileCamera::imageSize() const
+{
+	// include Y and UV planes
+	return sizeinfo_[size_].width * (sizeinfo_[size_].height * 3 / 2);
+}
+
+const unsigned char *FileCamera::getFrame()
+{
+	if (buf_ == NULL || fd_ == -1)
+		return testpattern();
+
+	y4m_frame_info_t fi;
+
+	y4m_init_frame_info(&fi);
+
+	int ysz = sizeinfo_[size_].width * sizeinfo_[size_].height;
+	int uvsz = ysz / 4;
+
+	uint8_t *yuv[3];
+	yuv[0] = (uint8_t *)buf_;
+	yuv[1] = (uint8_t *)buf_ + ysz;
+	yuv[2] = (uint8_t *)buf_ + ysz + uvsz;
+	int err = y4m_read_frame(fd_, &stream_, &fi, yuv);
+
+	if (err != Y4M_OK) {
+		printf("y4m_read_frame failed: %s\n", y4m_strerr(err));
+		stop();
+		return testpattern();
+	}
+
+	y4m_fini_frame_info(&fi);
+
+	return buf_;
 }

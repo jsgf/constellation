@@ -34,6 +34,8 @@ extern "C" {
 
 static const int nFeatures = 80;
 
+static bool finished = false;
+
 static Camera *cam;
 static GLuint imagetex;
 static GLuint startex;
@@ -831,7 +833,7 @@ static void display(void)
 	static struct timeval prev;
 	struct timeval start;
 	float deltax = 0, deltay = 0;
-	static unsigned char *img;
+	static const unsigned char *img;
 	int active = 0;
 
 	if (!paused || img == NULL)
@@ -987,6 +989,11 @@ static void display(void)
 			glColor3f(1, 0, 0);
 			drawString(cam->imageWidth() - 12, 10, 0, JustRight,
 				   "Recording");
+		}
+		if (cam->isrecording()) {
+			glColor3f(1, 0, 0);
+			drawString(cam->imageWidth() - 12, 20, 0, JustRight,
+				   "Recording Camera");
 		}
 	}
 
@@ -1151,7 +1158,8 @@ static void keyboard(SDL_keysym *sym)
 
 	case SDLK_ESCAPE:
 	case SDLK_q:
-		exit(0);
+		finished = true;
+		break;
 
 	case SDLK_b:
 		bordermode = (bordermode + 1) % 3;
@@ -1173,14 +1181,21 @@ static void keyboard(SDL_keysym *sym)
 		break;
 
 	case SDLK_r:
-		if (recordfile == NULL)
-			recordfile = gzdopen(newfile("record", ".ppm.gz"), "wb2");
-		else {
-			gzclose(recordfile);
-			recordfile = NULL;
+		if (shift) {
+			if (!cam->isrecording())
+				cam->startRecord(newfile("camera", ".y4m"));
+			else
+				cam->stopRecord();
+		} else {
+			if (recordfile == NULL)
+				recordfile = gzdopen(newfile("record", ".ppm.gz"), "wb2");
+			else {
+				gzclose(recordfile);
+				recordfile = NULL;
+			}
 		}
 		break;
-
+			
 	case SDLK_h:
 		histo = (histo + 1) % 3;
 		break;
@@ -1319,16 +1334,62 @@ static unsigned long long get_now()
 	return tv.tv_sec * 1000000ull + tv.tv_usec;
 }
 
-int main()
+int main(int argc, char **argv)
 {
-	int rate;
+	int opt;
+	bool err = false, cam_record = false;
 
 	srandom(getpid());
 
-	if (0 && RUNNING_ON_VALGRIND)
-		cam = new Camera(Camera::QSIF, rate = 10);
-	else
-		cam = new Camera(Camera::SIF, rate = 30);
+	while((opt = getopt(argc, argv, "rRaeto")) != EOF) {
+		switch(opt) {
+		case 'r':
+			recordfile = gzdopen(newfile("record", ".ppm.gz"), "wb2");
+			break;
+
+		case 'R':
+			cam_record = true;
+			break;
+
+		case 'a':
+			autoconst = false;
+			break;
+
+		case 't':
+			tracking = false;
+			break;
+
+		case 'e':
+			fullscreen = true;
+			break;
+
+		case 'o':
+			overlay = false;
+			break;
+
+		default:
+			fprintf(stderr, "Unknown option '%c'\n", opt);
+			err = true;
+			break;
+		}
+	}
+
+	if (err) {
+		fprintf(stderr, "Usage: %s [-rRaeto] [recorded-data.y4m]\n",
+			argv[0]);
+		exit(1);
+	}
+
+	
+	if (optind == argc-1) {
+		printf("opening %s...\n", argv[optind]);
+		cam = new FileCamera(argv[optind]);
+	} else {
+		if (0 && RUNNING_ON_VALGRIND)
+			cam = new V4LCamera(Camera::QSIF, 10);
+		else
+			cam = new V4LCamera(Camera::SIF, 30);
+	} 
 
 	atexit(atexit_closerecord);
 
@@ -1339,7 +1400,12 @@ int main()
 
 	atexit(SDL_Quit);
 
-	
+	cam->start();
+	int rate = cam->getRate();
+
+	if (cam_record)
+		cam->startRecord(newfile("camera", ".y4m"));
+
 	SDL_WM_SetCaption("Constellation", "Constellation");
 	SDL_ShowCursor(0);
 
@@ -1362,25 +1428,16 @@ int main()
 	glBindTexture(GL_TEXTURE_2D, startex);
 	GLERR();
 
-	{
-		static const int SIZE = 64;
-		unsigned char star[SIZE*SIZE];
-		int fd = open("star.raw", O_RDONLY);
-		read(fd, star, sizeof(star));
-		close(fd);
+	static const int SIZE = 64;
+	extern const char star[SIZE*SIZE];
 
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_INTENSITY,
+		     SIZE, SIZE,
+		     0, GL_LUMINANCE, GL_UNSIGNED_BYTE, star);
 
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_INTENSITY,
-			     SIZE, SIZE,
-			     0, GL_LUMINANCE, GL_UNSIGNED_BYTE, star);
+	GLERR();
 
-		GLERR();
-	}
-		
-
-	cam->start();
-
-	for(;;) {
+	while(!finished) {
 		handle_events();
 		display();
 
@@ -1408,4 +1465,8 @@ int main()
 		}
 		prev_time = get_now();
 	}
+
+	cam->stop();
+
+	delete cam;
 }

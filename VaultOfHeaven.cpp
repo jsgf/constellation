@@ -231,8 +231,13 @@ void VaultOfHeaven::Constellation::draw()
 		cx += it->second->x();
 		cy += it->second->y();
 
-		vx += fabs(it->first->x() - it->second->x());
-		vy += (it->first->y() - it->second->y());
+		if (it->first->x() < it->second->x()) {
+			vx -= (it->first->x() - it->second->x());
+			vy -= (it->first->y() - it->second->y());
+		} else {
+			vx += (it->first->x() - it->second->x());
+			vy += (it->first->y() - it->second->y());
+		}
 
 		count += 2;
 
