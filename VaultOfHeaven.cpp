@@ -194,7 +194,7 @@ void VaultOfHeaven::Constellation::draw() const
 
 	glPushAttrib(GL_LINE_BIT);
 	glLineWidth(2);
-	glColor3f(1, 1, 0);
+	glColor3f(.7, .7, .7);
 
 	glBegin(GL_LINES);
 	
@@ -216,7 +216,8 @@ void VaultOfHeaven::Constellation::draw() const
 
 	cx /= count;
 	cy /= count;
-	drawString(cx, cy, JustLeft, name_.c_str());
+	glColor3f(1, 1, 0);
+	drawString(cx, cy, JustCentre, name_.c_str());
 
 	glPopAttrib();
 }

@@ -1,4 +1,4 @@
-#include <GL/glut.h>
+#include <SDL/SDL.h>
 #include <GL/glu.h>
 #include <stdio.h>
 #include <sys/time.h>
@@ -50,10 +50,14 @@ static bool paused = false;
 static bool capture = false;
 static bool autoconst = false;
 static gzFile recordfile = NULL;
+static bool fullscreen = false;
 
+static SDL_Surface *windowsurf;
 static int screen_w, screen_h;
+static void reshape(int w, int h);
 
 static VaultOfHeaven heaven;
+
 
 static int newfile(const char *base, const char *ext)
 {
@@ -540,31 +544,29 @@ void drawimage(const unsigned char *img, float deltax, float deltay)
 
 	glMatrixMode(GL_TEXTURE);
 	glLoadIdentity();
-	if (0)
-		glScalef((float)cam->imageWidth() / power2(cam->imageWidth()),
-			 (float)cam->imageHeight() / power2(cam->imageHeight()),
-			 1);
-	else
-		glScalef(1.f / power2(cam->imageWidth()), 1.f / power2(cam->imageHeight()), 1);
+	glScalef(1.f / power2(cam->imageWidth()), 1.f / power2(cam->imageHeight()), 1);
 	glMatrixMode(GL_MODELVIEW);
 
 	glEnable(GL_TEXTURE_2D);
 	glDisable(GL_BLEND);
 
-	if (markers == 1)
-		glColor4f(.5, .5, .5, .5);
-	else
+	if (0 && markers == 1) {
+		// make it sky-ish when drawing stars
+		glColor4f(.3, .4, .8, 1);
+	} else
 		glColor4f(1, 1, 1, 1);
 
 	glShadeModel(GL_SMOOTH);
 	
 	glBegin(GL_QUADS);
+	glColor4f(0, .58, .99, 0);
 	glTexCoord2i(0, 0);
 	glVertex2i(0, 0);
 
 	glTexCoord2i(cam->imageWidth(), 0);
 	glVertex2i(cam->imageWidth(), 0);
 
+	glColor4f(.04, .07, .51, 0);
 	glTexCoord2i(cam->imageWidth(), cam->imageHeight());
 	glVertex2i(cam->imageWidth(), cam->imageHeight());
 
@@ -991,10 +993,10 @@ static void display(void)
 		delete[] pix;
 	}
 
-	glutSwapBuffers();
+	SDL_GL_SwapBuffers();
 }
 
-static void keyboard(unsigned char ch, int, int)
+static void keyboard(SDL_keysym *sym)
 {
 	static const struct size {
 		int w, h;
@@ -1006,47 +1008,50 @@ static void keyboard(unsigned char ch, int, int)
 		{ 352, 288 },		// CIF
 		{ 640, 480 },		// VGA
 		{ 800, 600 },
+		{1024, 768 },
 	};
+	bool shift = !!(sym->mod & KMOD_SHIFT);
 
-	switch(ch) {
-	case '1':
-	case '2':
-	case '3':
-	case '4':
-	case '5':
-	case '6':
-	case '7':
+	switch(sym->sym) {
+	case SDLK_1:
+	case SDLK_2:
+	case SDLK_3:
+	case SDLK_4:
+	case SDLK_5:
+	case SDLK_6:
+	case SDLK_7:
+	case SDLK_8:
 	{
-		int idx = ch - '1';
-		glutReshapeWindow(sizes[idx].w, sizes[idx].h);
+		int idx = sym->sym - SDLK_1;
+		reshape(sizes[idx].w, sizes[idx].h);
 		break;
 	}
 
-	case 27:
-	case 'q':
+	case SDLK_e:
+		fullscreen = !fullscreen;
+		reshape(screen_w, screen_h);
+		break;
+
+	case SDLK_ESCAPE:
+	case SDLK_q:
 		exit(0);
 
-	case 'b':
+	case SDLK_b:
 		bordermode = (bordermode + 1) % 3;
 		break;
 
-	case 's':
-		antishake = !antishake;
+	case SDLK_t:
+		if (shift)
+			features.reTriangulate();
+		else
+			tracking = !tracking;
 		break;
 
-	case 't':
-		tracking = !tracking;
-		break;
-
-	case 'T':
-		features.reTriangulate();
-		break;
-
-	case 'n':
+	case SDLK_n:
 		normalize = !normalize;
 		break;
 
-	case 'r':
+	case SDLK_r:
 		if (recordfile == NULL)
 			recordfile = gzdopen(newfile("record", ".ppm.gz"), "wb2");
 		else {
@@ -1055,76 +1060,83 @@ static void keyboard(unsigned char ch, int, int)
 		}
 		break;
 
-	case 'h':
+	case SDLK_h:
 		histo = (histo + 1) % 3;
 		break;
 
-	case 'f':
-		fft = (fft + 1) % 3;
+	case SDLK_f:
+		if (shift) {
+			fftscale--;
+			if (fftscale == 0)
+				fftscale = 4;
+		} else 
+			fft = (fft + 1) % 3;
 		break;
 
-	case 'F':
-		fftscale--;
-		if (fftscale == 0)
-			fftscale = 4;
-		break;
-
-	case 'm':
+	case SDLK_m:
 		markers = (markers+1)%3;
 		break;
 
-	case 'w':
+	case SDLK_w:
 		warp = !warp;
 		break;
 
-	case 'p':
+	case SDLK_p:
 		paused = !paused;
 		break;
 
-	case 'a':
+	case SDLK_a:
 		autoconst = !autoconst;
 		break;
 
-	case 'c':
-	{
-		const int limit = 10;
-		int i;
-
-		features.reTriangulate();
-		for(i = 0; i < limit; i++)
-			if (heaven.addConstellation())
-				break;
-		if (i == limit) {
-			heaven.clear();
+	case SDLK_c:
+		if (!shift) {
+			const int limit = 10;
+			int i;
+			
 			features.reTriangulate();
-			heaven.addConstellation();
-		}
+			for(i = 0; i < limit; i++)
+				if (heaven.addConstellation())
+					break;
+			if (i == limit) {
+				heaven.clear();
+				features.reTriangulate();
+				heaven.addConstellation();
+			}
+		} else
+			heaven.clear();
 		break;
-	}
 
-	case 'C':
-		heaven.clear();
+	case SDLK_s:
+		if (!shift)
+			antishake = !antishake;
+		else
+			capture = true;
 		break;
 
-	case 'S':
-		capture = true;
-		break;
-
-	case 'z':
+	case SDLK_z:
 		features.zero();
 		break;
+
+	default:
+		break;
 	}
-}
-
-static void timeout(int)
-{
-	glutTimerFunc(1000 / cam->getRate(), timeout, 0);
-
-	glutPostRedisplay();
 }
 
 static void reshape(int w, int h)
 {
+	unsigned flags = SDL_ANYFORMAT | SDL_OPENGL;
+
+	if (fullscreen)
+		flags |= SDL_FULLSCREEN;
+
+	windowsurf = SDL_SetVideoMode(w, h, 32, flags);
+
+	if (windowsurf == NULL) {
+		printf("Can't set video mode: %s\n", SDL_GetError());
+		return;
+	}
+
 	float img_asp  = (float)cam->imageWidth() / cam->imageHeight();
 	float screen_asp = (float)w / h;
 
@@ -1157,6 +1169,21 @@ static void reshape(int w, int h)
 	glTranslatef(0, -cam->imageHeight(), 0);
 }
 
+static void handle_events()
+{
+	SDL_Event ev;
+
+	while(SDL_PollEvent(&ev)) {
+		switch(ev.type) {
+		case SDL_KEYDOWN:
+			keyboard(&ev.key.keysym);
+			break;
+		case SDL_QUIT:
+			exit(0);
+		}
+	}
+}
+
 int main()
 {
 	if (0 && RUNNING_ON_VALGRIND)
@@ -1166,26 +1193,18 @@ int main()
 
 	atexit(atexit_closerecord);
 
-	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
-	//glutGameModeString("1024x768:32");
-	glutGameModeString("640x480:32@60");
-
-	if (0 && glutGameModeGet(GLUT_GAME_MODE_POSSIBLE))
-		glutEnterGameMode();
-	else {
-		printf("no game mode\n");
-
-		glutInitWindowSize(cam->imageWidth(), cam->imageHeight());
-		glutCreateWindow("Constellation");
-		glutFullScreen();
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) == -1) {
+		printf("Can't initialize SDL: %s\n", SDL_GetError());
+		exit(1);
 	}
 
-	glutDisplayFunc(display);
-	glutReshapeFunc(reshape);
-	glutKeyboardFunc(keyboard);
+	atexit(SDL_Quit);
 
-	glutTimerFunc(1000 / cam->getRate(), timeout, 0);
 	
+	SDL_WM_SetCaption("Constellation", "Constellation");
+	
+	reshape(640, 480);
+
 	glGenTextures(1, &imagetex);
 	glBindTexture(GL_TEXTURE_2D, imagetex);
 	GLERR();
@@ -1217,5 +1236,8 @@ int main()
 
 	cam->start();
 
-	glutMainLoop();
+	for(;;) {
+		handle_events();
+		display();
+	}
 }

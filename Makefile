@@ -9,12 +9,12 @@ KLT=/home/jeremy/robot/src/klt
 CGAL=/home/jeremy/robot/src/CGAL-3.0.1
 CGALPLAT=i686_Linux-2.6.7-rc3-mm2_g++-3.3.3
 
-CXXFLAGS=-Wall -g -O -fno-inline $(PROF) -I$(KLT) -I$(CGAL)/include -I$(CGAL)/include/CGAL/config/$(CGALPLAT)
+CXXFLAGS=-Wall -g -O -fno-inline $(PROF) -I$(KLT) -I$(CGAL)/include -I$(CGAL)/include/CGAL/config/$(CGALPLAT) -I/usr/include/freetype2
 
 all: constellation star.raw
 
 constellation: main.o Camera.o FeatureSet.o Feature.o VaultOfHeaven.o misc.o # Geom.o
-	$(CXX)  $(PROF) -o $@ $^ -lglut -lGL -L$(KLT) $(LIBKLT) -L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL -lfftw3 -lz
+	$(CXX)  $(PROF) -o $@ $^ -lSDL -lfreetype -lGLU -lGL -L$(KLT) $(LIBKLT) -L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL -lfftw3 -lz
 
 %.mpg: %.ppm.gz
 	zcat $< | ppmtoy4m | mpeg2enc -f 2 -q8 -o $@
