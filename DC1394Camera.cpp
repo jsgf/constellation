@@ -83,11 +83,13 @@ bool DC1394Camera::start()
 			case QCIF:
 			case SIF:
 			default:
+				size_ = SIF;
 				format_ = MODE_320x240_YUV422; // 320x240 4:2:2
 				break;
 
 			case CIF:
 			case VGA:
+				size_ = VGA;
 				format_ = MODE_640x480_YUV411; // 640x480 YUV4:1:1
 				break;
 			}
@@ -187,6 +189,11 @@ const unsigned char *DC1394Camera::getFrame()
 		}
 		}
 		dc1394_dma_done_with_buffer(&camera_);
+
+
+		if (recfd_ != -1)
+			writeFrame(buf_);
+
 		return buf_;
 	} else
 		return testpattern();
