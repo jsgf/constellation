@@ -685,7 +685,7 @@ static void setstate(lua_State *L, int idx)
 		else if (strcmp(str, "add") == 0) {
 			glBlendFunc(GL_ONE, GL_ONE);
 			glEnable(GL_BLEND);
-		} else if (strcmp(str, "1-alpha") == 0) {
+		} else if (strcmp(str, "alpha") == 0) {
 			glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 			glEnable(GL_BLEND);
 		} else {

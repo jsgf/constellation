@@ -65,7 +65,7 @@ function lostpoint(lostpt)
    function pt.draw (self) 
       local b = 1 - (self.age/10)
       --print("age=",self.age,"b=",b)
-      gfx.setstate({colour={b,b,b,b}, blend="1-alpha"})
+      gfx.setstate({colour={b,b,b,b}, blend="alpha"})
       gfx.sprite(butterfly, self.x, self.y, self.scale)
    end
 
@@ -79,9 +79,9 @@ function trackpoint(x, y, weight)
    function pt.draw(self)
       if self.age <= mature then
 	 local b = self.age/mature
-	 gfx.setstate({colour={b,b,b,b}, blend="1-alpha"})
+	 gfx.setstate({colour={b,b,b,b}, blend="alpha"})
       else
-	 gfx.setstate({colour={1,1,1,1}, blend="1-alpha"})
+	 gfx.setstate({colour={1,1,1,1}, blend="alpha"})
       end
 
       gfx.sprite(butterfly, self.x, self.y, .5)
@@ -133,7 +133,7 @@ function process_frame()
       p:draw()
    end
 
-   gfx.setstate({blend="1-alpha", colour={1,1,0,1}})
+   gfx.setstate({blend="alpha", colour={1,1,0,1}})
    for i in features do
       if type(i) == 'number' then
 	 features[i]:draw()
