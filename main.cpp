@@ -51,6 +51,7 @@ static bool capture = false;
 static bool autoconst = false;
 static gzFile recordfile = NULL;
 static bool fullscreen = false;
+static bool overlay = true;
 
 static SDL_Surface *windowsurf;
 static int screen_w, screen_h;
@@ -58,6 +59,20 @@ static void reshape(int w, int h);
 
 static VaultOfHeaven heaven;
 
+static struct vid_mode {
+	int w, h;
+} default_modes[] = {
+	{ 128,  96 },		// SQSIF
+	{ 160, 120 },		// QSIF
+	{ 176, 144 },		// QCIF
+	{ 320, 240 },		// SIF
+	{ 352, 288 },		// CIF
+	{ 640, 480 },		// VGA
+	{ 800, 600 },
+	{1024, 768 },
+	{0,0}
+};
+static struct vid_mode *modes = default_modes;
 
 static int newfile(const char *base, const char *ext)
 {
@@ -962,11 +977,21 @@ static void display(void)
 		      (prev.tv_sec * 1000000 + prev.tv_usec)) / 1000;
 	prev = now;
 
-	glColor3f(1, 1, 0);
-	drawString(10, cam->imageHeight() - 12, JustLeft,
-		   "Frame time: %3dms; %2d fps; %2d/%d active features", 
-		   delta, 1000 / framedelta, active, nFeatures);
-	
+	if (overlay) {
+		glColor3f(1, 1, 0);
+		drawString(10, cam->imageHeight() - 12, JustLeft,
+			   "Frame time: %3dms; %2d fps; %2d/%d active features", 
+			   delta, 1000 / framedelta, active, nFeatures);
+
+		drawString(10, 10, JustLeft, "%dx%d", screen_w, screen_h);
+
+		if (recordfile) {
+			glColor3f(1, 0, 0);
+			drawString(cam->imageWidth() - 12, 10, JustRight,
+				   "Recording");
+		}
+	}
+
 	if (recordfile) {
 		unsigned char *pix = new unsigned char [screen_w * screen_h * 3];
 		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
@@ -996,23 +1021,70 @@ static void display(void)
 	SDL_GL_SwapBuffers();
 }
 
+static void update_modes()
+{
+	SDL_Rect **m = SDL_ListModes(NULL, SDL_HWSURFACE | (fullscreen ? SDL_FULLSCREEN : 0));
+
+
+	if (modes != default_modes)
+		delete[] modes;
+
+	if (m == NULL || m == (SDL_Rect **)-1) {
+		modes = default_modes;
+		return;
+	}
+
+	int c;
+	for(c = 0; m[c]; c++)
+		;
+	modes = new vid_mode[c + 1];
+	for(int i = 0; i < c; i++) {
+		modes[i].w = m[c-i-1]->w;
+		modes[i].h = m[c-i-1]->h;
+	}
+	modes[c].w = modes[c].h = 0;
+}
+
+
 static void keyboard(SDL_keysym *sym)
 {
-	static const struct size {
-		int w, h;
-	} sizes[] = {
-		{ 128,  96 },		// SQSIF
-		{ 160, 120 },		// QSIF
-		{ 176, 144 },		// QCIF
-		{ 320, 240 },		// SIF
-		{ 352, 288 },		// CIF
-		{ 640, 480 },		// VGA
-		{ 800, 600 },
-		{1024, 768 },
-	};
 	bool shift = !!(sym->mod & KMOD_SHIFT);
 
 	switch(sym->sym) {
+	case SDLK_PLUS:
+	case SDLK_EQUALS:
+	case SDLK_MINUS:
+	{
+		int idx;
+
+		update_modes();
+
+		for(idx = 0; modes[idx].w != 0; idx++)
+			if (modes[idx].w == screen_w && 
+			    modes[idx].h == screen_h)
+				break;
+
+		if (modes[idx].w == 0)
+			idx--;
+
+
+		while(idx >= 0 && modes[idx].w != 0 && 
+		      modes[idx].w == screen_w &&
+		      modes[idx].h == screen_h) {
+			if (sym->sym == SDLK_PLUS ||
+			    sym->sym == SDLK_EQUALS)
+				idx++;
+			else
+				idx--;
+		}
+
+		if (idx < 0 || modes[idx].w == 0)
+			break;
+
+		reshape(modes[idx].w, modes[idx].h);
+		break;
+	}
+
 	case SDLK_1:
 	case SDLK_2:
 	case SDLK_3:
@@ -1023,7 +1095,7 @@ static void keyboard(SDL_keysym *sym)
 	case SDLK_8:
 	{
 		int idx = sym->sym - SDLK_1;
-		reshape(sizes[idx].w, sizes[idx].h);
+		reshape(default_modes[idx].w, default_modes[idx].h);
 		break;
 	}
 
@@ -1049,6 +1121,10 @@ static void keyboard(SDL_keysym *sym)
 
 	case SDLK_n:
 		normalize = !normalize;
+		break;
+
+	case SDLK_o:
+		overlay = !overlay;
 		break;
 
 	case SDLK_r:
@@ -1130,12 +1206,17 @@ static void reshape(int w, int h)
 	if (fullscreen)
 		flags |= SDL_FULLSCREEN;
 
+	if (w < 0 || w > 2000 || h < 0 || h > 2000) {
+		printf("BAD WH %dx%d\n", w, h);
+		return;
+	}
 	windowsurf = SDL_SetVideoMode(w, h, 32, flags);
 
 	if (windowsurf == NULL) {
-		printf("Can't set video mode: %s\n", SDL_GetError());
+		printf("Can't set video mode to (%dx%d): %s\n", w, h, SDL_GetError());
 		return;
 	}
+
 
 	float img_asp  = (float)cam->imageWidth() / cam->imageHeight();
 	float screen_asp = (float)w / h;
