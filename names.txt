@@ -1,25 +1,48 @@
 A Matter of Opinion
+Al Capone
+Alibi
 Anabelle
+Angels
+Aquarium
 Bebe The Circus Queen
 Bettong
+Bipolar
 Bitey
+Cave Canem
 Celsius
+Child-bearing Hipster
 Circle of Confusion
 Crises
 Dr. Ouch
+Drano
 Dunnart
+Fairies
 Fluffy
+Fractured Crumpet
+Friends of Imaginary Friends
 Gem in Eye
+Gooey
 Hawking's Wormhole
 Irrumatrix
+Judgemental
 Kultarr
 Mobius
+Modus Operandi
+Mote in Festus' Eye
 Ningaui
 No Laughing Matter
 Numbat
 O'Bryan
 O'Bryan's Belt
+PB & J
+Pancetta
+Pectoral
+Per Diem
+Periscope
 Phascogale
+Pink Elephant
+Pink Flamingo
+Pixies
 Planigale
 Potoroo
 Pseudantechinus
@@ -27,13 +50,22 @@ Quokka
 Quoll
 Right
 Rufous Spiny Bandicoot
+Silly
+Silverfish
 Some Laughing Matter
 Sparkle
+Star breath
+Sticky
 Strange Matter
+Tess of the Baskervilles
 The Action Item
+The Angry Alligator
+The Angry Dragon
+The Angry Monkey
 The Bee's Knees
 The Big Gipper
 The Big Womble
+The Blogger
 The Cephalapod Variable
 The City of Lost Children
 The Dangle
@@ -48,7 +80,10 @@ The Fuzzy Navel
 The Great Hair
 The Great Known
 The Haiku
+The Happy Alligator
 The Happy Clown
+The Happy Dragon
+The Happy Monkey
 The Heart of the Matter
 The Heart of the Party
 The Host
@@ -65,12 +100,17 @@ The Pseud
 The Quantum Entanglement
 The Quantum Entimologist
 The Quantum Etymologist
+The Radiator Grill
 The Remote
 The Scary Clown
 The Sense of Entitlement
 The Seven Hipsters
+The Slippery Slope
 The Stapler
+The Televangelist
 The The
+The Thin End of the Wedge
+The Twisted Oracle
 The Unchanging Variable
 The Undetermined
 The Unknown Known
@@ -85,33 +125,12 @@ Thesaurus
 Vertebra
 Wandering Star
 Wet Tau
-Wrong
-Your Ad Here
-Tess of the Baskervilles
-The Twisted Oracle
-Fractured Crumpet
-Sticky
-Gooey
 Wonky
-Silly
-Pixies
-Angels
-Fairies
-Silverfish
-Zircon the Nose Star
-Drano
-Pectoral
-Modus Operandi
-Periscope
-Aquarium
-Cave Canem
-Pancetta
-Alibi
-Al Capone
-Per Diem
-The Slippery Slope
-The Thin End of the Wedge
-Bipolar
-Judgemental
+Wonky Toe
+Wrong
 Yes, you're full of stars
-Star breath
+Your Ad Here
+Your Imaginary Friend
+Your Imaginary Internet Friend
+Zircon the Nose Star
+Happy Happy Joy Joy!

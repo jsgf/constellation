@@ -394,14 +394,20 @@ int main(int argc, char **argv)
 {
 	int opt;
 	bool err = false, cam_record = false;
+	const char *camera_file = NULL;
+	const char *script = "bok.lua";
 
 	srandom(getpid());
 
-	while((opt = getopt(argc, argv, "e")) != EOF) {
+	while((opt = getopt(argc, argv, "ep:")) != EOF) {
 		switch(opt) {
 		case 'e':
 			fullscreen = true;
 			break;
+
+		case 'p':
+		  camera_file = optarg;
+		  break;
 
 		default:
 			fprintf(stderr, "Unknown option '%c'\n", opt);
@@ -411,15 +417,18 @@ int main(int argc, char **argv)
 	}
 
 	if (err) {
-		fprintf(stderr, "Usage: %s [-e] [recorded-data.y4m]\n",
+		fprintf(stderr, "Usage: %s [-e] [-p recorded-data.y4m] [script.lua]\n",
 			argv[0]);
 		exit(1);
 	}
 
 	
-	if (optind == argc-1) {
-		printf("opening %s...\n", argv[optind]);
-		cam = new FileCamera(argv[optind]);
+	if (optind == argc-1)
+		script = argv[optind];
+
+	if (camera_file) {
+		printf("opening %s...\n", camera_file);
+		cam = new FileCamera(camera_file);
 		cam->start();
 	} else {
 		Camera::framesize_t size = Camera::SIF;
@@ -472,7 +481,7 @@ int main(int argc, char **argv)
 		     0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
 	GLERR();
 
-	lua_setup("bok.lua");
+	lua_setup(script);
 	atexit(lua_cleanup);
 
 	while(!finished) {

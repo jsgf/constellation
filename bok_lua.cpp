@@ -480,12 +480,6 @@ static int texture_new(lua_State *L)
 		for(unsigned r = 0; r < height; r++) {
 			png_byte *row = &pixels[r * texwidth * channels];
 			memcpy(row, rows[r], rowbytes);
-			if (color_type & PNG_COLOR_MASK_ALPHA) {
-				png_byte *pix = row;
-				for(int x = 0; x < width; x++, pix += channels)
-					for(int c = 0; c < channels-1; c++)
-						pix[c] = pix[c] * pix[channels-1] / 255;
-			}
 		}
 
 		tex = (struct texture *)lua_newuserdata(L, sizeof(*tex));
@@ -508,6 +502,15 @@ static int texture_new(lua_State *L)
 		gluBuild2DMipmaps(GL_TEXTURE_2D, fmt, 
 				  texwidth, texheight, 
 				  fmt, GL_UNSIGNED_BYTE, pixels);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+				GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+				GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+				GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+				GL_LINEAR_MIPMAP_LINEAR);
 		GLERR();
 	}
 
@@ -590,10 +593,6 @@ static int gfx_sprite(lua_State *L)
 	glBindTexture(GL_TEXTURE_2D, tex->texid);
 	glEnable(GL_TEXTURE_2D);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
 
@@ -642,6 +641,12 @@ static void setstate(lua_State *L, int idx)
 	lua_pushstring(L, "colour");
 	lua_gettable(L, idx);
 	
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 1);
+		lua_pushstring(L, "color");
+		lua_gettable(L, idx);
+	}
+
 	if (lua_istable(L, -1)) {
 		// Colour is either { R, G, B, A } or { r=R, g=G, b=B, a=A }
 		// (or a mixture)

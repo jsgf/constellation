@@ -32,7 +32,8 @@ _KLT_FloatImage _KLTCreateFloatImage(
   int nrows)
 {
   _KLT_FloatImage floatimg;
-  int nbytes = sizeof(_KLT_FloatImageRec) +
+  int recsz = (sizeof(_KLT_FloatImageRec) + 15) & ~15;
+  int nbytes = recsz +
     ncols * nrows * sizeof(float);
 
   /* make sure address is 16-byte aligned */
@@ -40,7 +41,7 @@ _KLT_FloatImage _KLTCreateFloatImage(
     KLTError("(_KLTCreateFloatImage)  Out of memory");
   floatimg->ncols = ncols;
   floatimg->nrows = nrows;
-  floatimg->data = (float *)  (floatimg + 1);
+  floatimg->data = (float *)  ((char *)floatimg + recsz);
 
   return(floatimg);
 }

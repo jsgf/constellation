@@ -11,7 +11,7 @@ particles = {}			-- particles
 star = gfx.texture('star.png')
 print(fmt("star: fmt=%s %dx%d", star.format, star.width, star.height))
 
-butterfly = gfx.texture('/usr/share/atlantis/atlantis.png')
+butterfly = gfx.texture('atlantis.png')
 
 -- a simple particle under the influence of gravity
 function particle(x, y, dx, dy, life)
@@ -53,8 +53,8 @@ function lostpoint(lostpt)
       self.y = self.y + self.dy
 
       self.scale = self.scale * 1.2
-      self.dx = self.dx * 1.4
-      self.dy = self.dy * 1.4
+      self.dx = self.dx * 1.2
+      self.dy = self.dy * 1.2
 
       self.age = self.age+1
       if self.age > 10 then
