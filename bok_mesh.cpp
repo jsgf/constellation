@@ -55,7 +55,10 @@ struct mesh
 	GtsSurface *surface;
 };
 
-/* BokVertex: Header */
+
+/****************************************
+ BokVertex
+ ****************************************/
 
 typedef struct _BokVertex         BokVertex;
 
@@ -66,22 +69,13 @@ struct _BokVertex {
 	int ref;		// reference to Lua data
 };
 
-typedef struct _BokVertexClass    BokVertexClass;
-
-struct _BokVertexClass {
-  GtsVertexClass parent_class;
-};
-
 #define BOK_VERTEX(obj)            GTS_OBJECT_CAST (obj,\
 					         BokVertex,\
 					         bok_vertex_class ())
-#define BOK_VERTEX_CLASS(klass)    GTS_OBJECT_CLASS_CAST (klass,\
-						 BokVertexClass,\
-						 bok_vertex_class())
 #define IS_BOK_VERTEX(obj)         (gts_object_is_from_class (obj,\
 						 bok_vertex_class ()))
 
-static BokVertexClass *bok_vertex_class  (void);
+static GtsVertexClass *bok_vertex_class  (void);
 
 /* BokVertex: Object */
 
@@ -96,8 +90,20 @@ static void bok_vertex_clone(GtsObject *clone, GtsObject *object)
 static void bok_vertex_destroy (GtsObject * object)
 {
 	BokVertex *v = BOK_VERTEX(object);
+	lua_State *L = v->L;
 
-	luaL_unref(v->L, LUA_REGISTRYINDEX, v->ref);
+	if (L) {
+		// remove decoration
+		lua_rawgeti(L, LUA_REGISTRYINDEX, v->ref);
+		lua_pushliteral(L, "__mesh");
+		lua_pushnil(L);
+		lua_settable(L, -3);
+		lua_pop(L, 1);
+
+		// drop reference
+		luaL_unref(v->L, LUA_REGISTRYINDEX, v->ref);
+	}
+
 	v->L = NULL;
 	v->ref = LUA_NOREF;
 
@@ -105,7 +111,7 @@ static void bok_vertex_destroy (GtsObject * object)
 }
 
 
-static void bok_vertex_class_init (BokVertexClass * klass)
+static void bok_vertex_class_init (GtsVertexClass * klass)
 {
 	GTS_OBJECT_CLASS(klass)->clone = bok_vertex_clone;
 	GTS_OBJECT_CLASS(klass)->destroy = bok_vertex_destroy;
@@ -117,28 +123,28 @@ static void bok_vertex_init (BokVertex * v)
 	v->ref = LUA_NOREF;
 }
 
-BokVertexClass * bok_vertex_class (void)
+GtsVertexClass * bok_vertex_class (void)
 {
-	static BokVertexClass * klass = NULL;
+	static GtsVertexClass * klass = NULL;
 
 	if (klass == NULL) {
 		GtsObjectClassInfo bok_vertex_info = {
 			"BokVertex",
 			sizeof (BokVertex),
-			sizeof (BokVertexClass),
+			sizeof (GtsVertexClass),
 			(GtsObjectClassInitFunc) bok_vertex_class_init,
 			(GtsObjectInitFunc) bok_vertex_init,
 			(GtsArgSetFunc) NULL,
 			(GtsArgGetFunc) NULL
 		};
-		klass = BOK_VERTEX_CLASS(gts_object_class_new (GTS_OBJECT_CLASS (gts_vertex_class ()),
+		klass = GTS_VERTEX_CLASS(gts_object_class_new (GTS_OBJECT_CLASS (gts_vertex_class ()),
 							       &bok_vertex_info));
 	}
 
 	return klass;
 }
 
-static BokVertex *bok_vertex_new(BokVertexClass *klass, lua_State *L, int idx,
+static BokVertex *bok_vertex_new(GtsVertexClass *klass, lua_State *L, int idx,
 				 float x, float y)
 {
 	BokVertex *v;
@@ -153,6 +159,108 @@ static BokVertex *bok_vertex_new(BokVertexClass *klass, lua_State *L, int idx,
 
 	return v;
 }
+
+/****************************************
+ BokEdge
+ ****************************************/
+
+typedef struct _BokEdge         BokEdge;
+
+struct _BokEdge {
+	/*< private >*/
+	GtsEdge parent;
+
+	/*< public >*/
+	lua_State *L;
+	int ref;		// reference to lua edge (edge)
+};
+
+#define BOK_EDGE(obj)            GTS_OBJECT_CAST (obj,\
+						  BokEdge,		\
+						  bok_edge_class ())
+#define IS_BOK_EDGE(obj)         (gts_object_is_from_class (obj,\
+							       bok_edge_class ()))
+
+GtsEdgeClass * bok_edge_class  (void);
+BokEdge * bok_edge_new    (GtsEdgeClass * klass);
+
+static void bok_edge_init (BokEdge * object)
+{
+	object->L = NULL;
+	object->ref = LUA_NOREF;
+}
+
+static void bok_edge_clone(GtsObject *clone, GtsObject *object)
+{
+	(* GTS_OBJECT_CLASS (bok_edge_class ())->parent_class->clone) (clone, 
+									  object);
+	BOK_EDGE (clone)->L = NULL;
+	BOK_EDGE (clone)->ref = LUA_NOREF;
+}
+
+static void bok_edge_destroy (GtsObject * object)
+{
+	BokEdge *s = BOK_EDGE(object);
+	lua_State *L = s->L;
+
+	if (L) {
+		// remove decoration
+		lua_rawgeti(L, LUA_REGISTRYINDEX, s->ref);
+		lua_pushliteral(L, "__mesh");
+		lua_pushnil(L);
+		lua_settable(L, -3);
+		lua_pop(L, 1);
+		
+		// drop reference
+		luaL_unref(s->L, LUA_REGISTRYINDEX, s->ref);
+	}
+
+	s->L = NULL;
+	s->ref = LUA_NOREF;
+
+	(* GTS_OBJECT_CLASS (bok_edge_class ())->parent_class->destroy) (object);
+}
+
+static void bok_edge_class_init (GtsEdgeClass * klass)
+{
+	GTS_OBJECT_CLASS(klass)->clone = bok_edge_clone;
+	GTS_OBJECT_CLASS(klass)->destroy = bok_edge_destroy;
+}
+
+GtsEdgeClass * bok_edge_class (void)
+{
+	static GtsEdgeClass * klass = NULL;
+
+	if (klass == NULL) {
+		GtsObjectClassInfo bok_edge_info = {
+			"BokEdge",
+			sizeof (BokEdge),
+			sizeof (GtsEdgeClass),
+			(GtsObjectClassInitFunc) bok_edge_class_init,
+			(GtsObjectInitFunc) bok_edge_init,
+			(GtsArgSetFunc) NULL,
+			(GtsArgGetFunc) NULL
+		};
+		klass = GTS_EDGE_CLASS(gts_object_class_new (GTS_OBJECT_CLASS (gts_edge_class ()),
+							     &bok_edge_info));
+	}
+
+	return klass;
+}
+
+BokEdge * bok_edge_new (GtsEdgeClass * klass)
+{
+	BokEdge * object;
+
+	object = BOK_EDGE (gts_object_new (GTS_OBJECT_CLASS (klass)));
+
+	return object;
+}
+
+
+
+/****************************************/
+
 
 static int mesh_gc(lua_State *);
 
@@ -193,8 +301,8 @@ static int mesh_new(lua_State *L)
 
 	mesh->surface = gts_surface_new(gts_surface_class(),
 					gts_face_class(),
-					gts_edge_class(),
-					GTS_VERTEX_CLASS(bok_vertex_class()));
+					bok_edge_class(),
+					bok_vertex_class());
 
 	// Build a list of bounding points to create a hull-face for
 	// the surface
@@ -257,7 +365,7 @@ static int mesh_add(lua_State *L)
 		if (!get_xy(L, i, &x, &y))
 			continue;
 		
-		printf("mesh.add: mesh=%p, %g,%g\n", mesh, x, y);
+		//printf("mesh.add: mesh=%p, %g,%g\n", mesh, x, y);
 
 		v = bok_vertex_new(bok_vertex_class(), L, i, x, y);
 		v1 = gts_delaunay_add_vertex(mesh->surface, GTS_VERTEX(v), NULL);
@@ -271,7 +379,14 @@ static int mesh_add(lua_State *L)
 			
 		if (v1 != NULL) {
 			// another point is already here; replace it
-			gts_vertex_replace(v1, GTS_VERTEX(v));
+			printf("replacing v1=%p with v=%p\n",
+			       v1, v);
+			// gts_vertex_replace doesn't seem to work well
+			// gts_vertex_replace(v1, GTS_VERTEX(v));
+			gts_delaunay_remove_vertex(mesh->surface, v1);
+
+			v1 = gts_delaunay_add_vertex(mesh->surface, GTS_VERTEX(v), NULL);
+			assert(v1 == NULL);
 		}
 
 		// add/replace __mesh reference in point
@@ -305,8 +420,9 @@ static int mesh_del(lua_State *L)
 			GtsVertex *v = GTS_VERTEX(lua_touserdata(L, -1));
 			
 			if (v != NULL) {
-				printf("mesh.del: mesh=%p, %g,%g\n", 
-				       mesh, v->p.x, v->p.y);
+				if (0)
+					printf("mesh.del: mesh=%p, %g,%g\n", 
+					       mesh, v->p.x, v->p.y);
 
 				gts_delaunay_remove_vertex(mesh->surface, v);
 				//gts_surface_print_stats(mesh->surface, stdout);
@@ -356,8 +472,12 @@ static int mesh_points(lua_State *L)
 	return data.count;
 }
 
-static void push_edge(lua_State *L, BokVertex *v1, BokVertex *v2)
+// Construct a new edge table. This consists of two verticies at
+// indicies 1 and 2, a __mesh entry which points back to the BokEdge,
+// and a metatable (TODO).
+static void make_edge(lua_State *L, BokEdge *e, BokVertex *v1, BokVertex *v2)
 {
+	assert(e->L  == L);
 	assert(v1->L == L);
 	assert(v2->L == L);
 
@@ -368,17 +488,32 @@ static void push_edge(lua_State *L, BokVertex *v1, BokVertex *v2)
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, v2->ref);
 	lua_rawseti(L, -2, 2);
+
+	lua_pushliteral(L, "__mesh");
+	lua_pushlightuserdata(L, e);
+	lua_settable(L, -3);
+
+	lua_pushvalue(L, -1);
+	e->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 }
 
 static gint foreach_edge_func(gpointer item, gpointer data)
 {
 	struct surface_foreach *edata = (struct surface_foreach *)data;
 	
-	if (GTS_IS_SEGMENT(item)) {
-		GtsSegment *seg = GTS_SEGMENT(item);
+	if (IS_BOK_EDGE(item) && GTS_IS_SEGMENT(item)) {
+		BokEdge *e = BOK_EDGE(item);
+		GtsSegment *s = GTS_SEGMENT(item);
+		lua_State *L = edata->L;
 
-		if (IS_BOK_VERTEX(seg->v1) && IS_BOK_VERTEX(seg->v2)) {
-			push_edge(edata->L, BOK_VERTEX(seg->v1), BOK_VERTEX(seg->v2));
+		lua_checkstack(L, edata->count+5);
+
+		if (e->ref != LUA_NOREF) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, e->ref);
+			edata->count++;
+		} else 	if (IS_BOK_VERTEX(s->v1) && IS_BOK_VERTEX(s->v2)) {
+			e->L = edata->L;
+			make_edge(L, e, BOK_VERTEX(s->v1), BOK_VERTEX(s->v2));
 			edata->count++;
 		}
 	}
