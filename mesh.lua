@@ -3,7 +3,7 @@ require('bokstd')
 blob = gfx.texture('blob.png')
 
 
-t = tracker.new(30, 50)
+t = tracker.new(50, 80)
 
 m = mesh.new()
 
@@ -13,13 +13,16 @@ nonmeshedges = {}
 nme_meta = {
    add = function (self, e)
 	    self[e] = e
-	    self[tostring(e)] = e
+	    self[e:key()] = e
 	 end,
    remove = function (self, e)
 	       --print('removing',self[e],self[tostring(e)])
 	       self[e] = nil
-	       self[tostring(e)] = nil
-	    end
+	       self[e:key()] = nil
+	    end,
+   find = function(self, v1, v2)
+	     return self[edgekey(v1,v2)]
+	  end
 }
 nme_meta.__index = nme_meta
 setmetatable(nonmeshedges, nme_meta)
@@ -71,6 +74,10 @@ function edgekey(v1, v2)
    return ret
 end
 
+function edgemeta:key()
+   return edgekey(self[1], self[2])
+end
+
 function edgemeta:__tostring()
    return string.format('%s - %s', tostring(self[1]), tostring(self[2]))
 end
@@ -81,7 +88,7 @@ end
 function m:newedge(v1, v2)
    --print('v1:', v1.x, v1.y, 'v2: ',v2.x, v2.y)
 
-   e = nonmeshedges[edgekey(v1, v2)]
+   e = nonmeshedges:find(v1, v2)
    if e then
       --print('recycling', e)
       nonmeshedges:remove(e)
