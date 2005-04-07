@@ -32,10 +32,14 @@
 //			   of multiple triangles then it will return any of
 //			   those triangles).  pt need not be a mesh vertex.
 //
+//  newedge(pt, v1, v2) -- user supplied - if set, called to create an edge
+//
 // Object: edge
 //  points(self)	-- return tuple of points containing the edge
 //  triangles(self)	-- return the triangles on either side of 
 //                         edge (or nil if one is missing)
+//  remove(self)	-- user supplied - called if edge is removed from the mesh
+//
 // Object: triangle
 //  points(self)	-- return triple of points
 //  edges(self)		-- return triple of edges
@@ -266,8 +270,8 @@ static void bok_edge_destroy (GtsObject * object)
 		// remove decoration
 		pushref(L, e->ref);
 		undecorate(L, -1);
-		lua_pop(L, 1);
-		
+
+
 		// drop reference
 		luaL_unref(L, LUA_REGISTRYINDEX, e->ref);
 	}
@@ -319,22 +323,44 @@ static BokEdge * bok_edge_new (GtsEdgeClass * klass)
 /****************************************/
 
 
-static int mesh_gc(lua_State *);
-
+// Get the userdata for a mesh object.  If the object is a table, then
+// look up a __mesh element which points to the userdata; otherwise
+// assume idx is the userdata itself.
 static struct mesh *mesh_get(lua_State *L, int idx)
 {
-	return (struct mesh *)luaL_checkudata(L, idx, "bokchoi.mesh");
+	void *ret;
+	idx = absidx(L, idx);
+
+	if (lua_istable(L, idx)) {
+		lua_pushliteral(L, "__mesh");
+		lua_gettable(L, idx);
+		ret = luaL_checkudata(L, -1, "bokchoi.meshuserdata");
+		lua_pop(L, 1);
+	} else
+		ret = luaL_checkudata(L, idx, "bokchoi.meshuserdata");
+
+	return (struct mesh *)ret;
 }
 
+// This creates a mesh object.  The thing returned is a simple table,
+// with a metatable defining all the methods.  The table has a
+// '__mesh' element which points to the userdata.
 static int mesh_new(lua_State *L)
 {
 	struct mesh *mesh;
 	int nargs = lua_gettop(L);
 
-	mesh = (struct mesh *)lua_newuserdata(L, sizeof(*mesh));
-
+	lua_newtable(L);	// mesh table to be returned
 	luaL_getmetatable(L, "bokchoi.mesh");
 	lua_setmetatable(L, -2);
+
+	lua_pushliteral(L, "__mesh");
+
+	mesh = (struct mesh *)lua_newuserdata(L, sizeof(*mesh));
+	luaL_getmetatable(L, "bokchoi.meshuserdata");
+	lua_setmetatable(L, -2);
+
+	lua_settable(L, -3);	// set ret.__mesh
 
 	mesh->surface = gts_surface_new(gts_surface_class(),
 					gts_face_class(),
@@ -474,6 +500,7 @@ static int mesh_del(lua_State *L)
 struct surface_foreach {
 	lua_State *L;
 	int count;
+	int meshidx;
 };
 
 static gint foreach_vertex_func(gpointer item, gpointer data)
@@ -506,21 +533,35 @@ static int mesh_points(lua_State *L)
 }
 
 // Construct a new edge table. This consists of two verticies at
-// indicies 1 and 2, a __mesh entry which points back to the BokEdge,
-// and a metatable (TODO).
-static void make_edge(lua_State *L, BokEdge *e, BokVertex *v1, BokVertex *v2)
+// indicies 1 and 2, and a __mesh entry which points back to the
+// BokEdge.
+static void make_edge(lua_State *L, int meshidx, BokEdge *e, BokVertex *v1, BokVertex *v2)
 {
 	assert(e->L  == L);
 	assert(v1->L == L);
 	assert(v2->L == L);
 
-	lua_newtable(L);
+	meshidx = absidx(L, meshidx);
 
-	pushref(L, v1->ref);
-	lua_rawseti(L, -2, 1);
+	lua_pushliteral(L, "newedge");
+	lua_gettable(L, meshidx);
 
-	pushref(L, v2->ref);
-	lua_rawseti(L, -2, 2);
+	if (lua_isfunction(L, -1)) {
+		call_lua(L, 1, -1, "Irr", meshidx, v1->ref, v2->ref);
+		lua_remove(L, -2); // remove function
+		if (!lua_istable(L,-1))
+			luaL_error(L, "mesh:newedge didn't return an edge");
+	} else {
+		lua_pop(L, 1);	// drop non-function result
+
+		lua_newtable(L);
+
+		pushref(L, v1->ref);
+		lua_rawseti(L, -2, 1);
+
+		pushref(L, v2->ref);
+		lua_rawseti(L, -2, 2);
+	}
 
 	decorate(L, -1, e);
 
@@ -544,7 +585,8 @@ static gint foreach_edge_func(gpointer item, gpointer data)
 			edata->count++;
 		} else 	if (IS_BOK_VERTEX(s->v1) && IS_BOK_VERTEX(s->v2)) {
 			e->L = edata->L;
-			make_edge(L, e, BOK_VERTEX(s->v1), BOK_VERTEX(s->v2));
+			make_edge(L, edata->meshidx, e,
+				  BOK_VERTEX(s->v1), BOK_VERTEX(s->v2));
 			edata->count++;
 		}
 	}
@@ -569,7 +611,7 @@ static int mesh_edges(lua_State *L)
 		}
 	} else {
 		// return everything
-		struct surface_foreach data = { L, 0 };
+		struct surface_foreach data = { L, 0, 1 };
 
 		gts_surface_foreach_edge(mesh->surface, foreach_edge_func, &data);
 		ret = data.count;
@@ -606,6 +648,69 @@ static bool delaunay_check (GtsSurface *surface, GtsTriangle * t)
 	return ret;
 }
 
+// If we've found a vertex which needs removal and replacement,
+// remember all the edges it had, and restore the ones which are
+// unchanged.
+static void adjust_edges(lua_State *L, GtsSurface *surface, BokVertex *v)
+{
+	gts_allow_floating_vertices = TRUE;
+
+	GSList *segments = NULL;
+
+	// save a list of interesting edges so we can restore them if needed
+	for(GSList *s = GTS_VERTEX(v)->segments; s != NULL; s = s->next) {
+		if (IS_BOK_EDGE(s->data) && BOK_EDGE(s->data)->ref != LUA_NOREF)
+			segments = g_slist_prepend(segments, 
+						   gts_object_clone(GTS_OBJECT(s->data)));
+	}
+
+	gts_delaunay_remove_vertex(surface, GTS_VERTEX(v));
+	gts_delaunay_add_vertex(surface, GTS_VERTEX(v), NULL);
+
+	// Search segment list for new matching segments, and reattach
+	// the Lua state
+	for(GSList *s = segments; s != NULL; s = s->next) {
+		BokEdge *be = BOK_EDGE(s->data);
+
+		assert(IS_BOK_EDGE(be));
+				
+		for(GSList *vs = GTS_VERTEX(v)->segments; 
+		    vs != NULL; vs = vs->next) {
+			BokEdge *ve = BOK_EDGE(vs->data);
+
+			if (IS_BOK_EDGE(vs->data) &&
+			    ve->ref == LUA_NOREF &&
+			    gts_segments_are_identical(GTS_SEGMENT(be),
+						       GTS_SEGMENT(ve))) {
+				// transfer ownership of Lua reference
+				ve->L = be->L;
+				ve->ref = be->ref;
+				be->L = NULL;
+				be->ref = LUA_NOREF;
+			}
+		}
+		if (be->L != NULL) {
+			// Edge was not used; call the edge's remove
+			// method (if any)
+			assert(be->ref != LUA_NOREF);
+
+			pushref(L, be->ref);
+			lua_pushliteral(L, "remove");
+			lua_gettable(L, -2);
+			if (lua_isfunction(L, -1))
+				call_lua(L, 0, -1, "I", -2);
+					
+			lua_pop(L, 2);	// drop function and table
+		}
+
+		gts_object_destroy(GTS_OBJECT(be));
+	}
+
+	g_slist_free(segments);
+
+	gts_allow_floating_vertices = FALSE;			
+}
+
 // Update the mesh when a point moves.
 //
 // This retains all edges which are unaffected by the move.
@@ -638,48 +743,7 @@ static int mesh_move(lua_State *L)
 		// If moving the points breaks the delaunay property, then
 		// remove and reinsert it.
 		if (!delaunay_check(mesh->surface, GTS_TRIANGLE(f))) {
-			gts_allow_floating_vertices = TRUE;
-
-			GSList *segments = NULL;
-
-			// save a list of interesting edges so we can restore them if needed
-			for(GSList *s = GTS_VERTEX(v)->segments; s != NULL; s = s->next) {
-				if (IS_BOK_EDGE(s->data) && BOK_EDGE(s->data)->ref != LUA_NOREF)
-					segments = g_slist_prepend(segments, 
-								   gts_object_clone(GTS_OBJECT(s->data)));
-			}
-
-			gts_delaunay_remove_vertex(mesh->surface, GTS_VERTEX(v));
-			gts_delaunay_add_vertex(mesh->surface, GTS_VERTEX(v), NULL);
-
-			// Search segment list for new matching
-			// segments, and reattach the Lua state
-			for(GSList *s = segments; s != NULL; s = s->next) {
-				BokEdge *be = BOK_EDGE(s->data);
-
-				assert(IS_BOK_EDGE(be));
-				
-				for(GSList *vs = GTS_VERTEX(v)->segments; 
-				    vs != NULL; vs = vs->next) {
-					BokEdge *ve = BOK_EDGE(vs->data);
-
-					if (IS_BOK_EDGE(vs->data) &&
-					    ve->ref == LUA_NOREF &&
-					    gts_segments_are_identical(GTS_SEGMENT(be),
-								       GTS_SEGMENT(ve))) {
-						// transfer ownership of Lua reference
-						ve->L = be->L;
-						ve->ref = be->ref;
-						be->L = NULL;
-						be->ref = LUA_NOREF;
-					}
-				}
-				gts_object_destroy(GTS_OBJECT(be));
-			}
-
-			g_slist_free(segments);
-
-			gts_allow_floating_vertices = FALSE;			
+			adjust_edges(L, mesh->surface, v);
 			break;
 		}
 	}
@@ -689,21 +753,24 @@ static int mesh_move(lua_State *L)
 	return 0;
 }
 
-static const luaL_reg mesh_meta[] = {
+// mesh userdata meta
+static const luaL_reg meshuser_meta[] = {
 	{ "__gc",	mesh_gc },
+};
+
+// mesh methods
+static const luaL_reg mesh_meta[] = {
 	{ "add",	mesh_add },
 	{ "del",	mesh_del },
-
-	{ "points",	mesh_points },
-
 	{ "move",	mesh_move },
 
+	{ "points",	mesh_points },
 	{ "edges",	mesh_edges },
 
 	{0,0}
 };
 
-static const luaL_reg mesh_methods[] = {
+static const luaL_reg mesh_library[] = {
 	{ "new",	mesh_new },
 
 	{0,0}
@@ -711,14 +778,26 @@ static const luaL_reg mesh_methods[] = {
 
 void mesh_register(lua_State *L)
 {
-	luaL_openlib(L, "mesh", mesh_methods, 0);
+	// mesh library
+	luaL_openlib(L, "mesh", mesh_library, 0);
+	lua_pop(L, 1);
 
+	// mesh instance methods
 	luaL_newmetatable(L, "bokchoi.mesh");
 	lua_pushstring(L, "__index");
 	lua_pushvalue(L, -2);  /* pushes the metatable */
 	lua_settable(L, -3);  /* metatable.__index = metatable */
   
 	luaL_openlib(L, 0, mesh_meta, 0);
+	lua_pop(L, 1);
+
+	// mesh userdata
+	luaL_newmetatable(L, "bokchoi.meshuserdata");
+	lua_pushstring(L, "__index");
+	lua_pushvalue(L, -2);  /* pushes the metatable */
+	lua_settable(L, -3);  /* metatable.__index = metatable */
+  
+	luaL_openlib(L, 0, meshuser_meta, 0);
 
 	lua_pop(L, 2);
 }

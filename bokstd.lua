@@ -73,3 +73,12 @@ function drawframe(frame)
    gfx.setstate({colour={}, blend='none'})
    gfx.sprite(frame.width/2, frame.height/2, nil, frame)
 end
+
+-- a source of unique numeric identifiers
+unique = coroutine.wrap(function () 
+			   local count = 1
+			   while true do
+			      coroutine.yield(count)
+			      count = count+1
+			   end
+			end)

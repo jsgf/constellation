@@ -17,6 +17,7 @@ extern "C" {
 #include <GL/glu.h>
 #include <GL/glext.h>
 
+#include "bok_lua.h"
 #include "bok_mesh.h"
 
 #if GL_EXT_texture_rectangle
@@ -184,12 +185,7 @@ static int tracker_track(lua_State *L)
 			lua_pushstring(L, "add");
 			lua_gettable(L, 2);
 			if (lua_isfunction(L, -1)) {
-				lua_pushvalue(L, 2); // features
-				lua_pushnumber(L, lidx); // idx
-				lua_pushnumber(L, f->x);
-				lua_pushnumber(L, f->y);
-				lua_pushnumber(L, f->val);
-				lua_call(L, 5, 0);
+				call_lua(L, 0, -1, "Iifff", 2, lidx, f->x, f->y, f->val);
 			} else {
 				lua_pushnumber(L, lidx);
 				lua_newtable(L);
@@ -217,10 +213,7 @@ static int tracker_track(lua_State *L)
 			lua_pushstring(L, "move");
 			lua_gettable(L, 3);
 			if (lua_isfunction(L, -1)) {
-				lua_pushvalue(L, -2); // point
-				lua_pushnumber(L, f->x);
-				lua_pushnumber(L, f->y);
-				lua_call(L, 3, 0);
+				call_lua(L, 0, -1, "Iff", -2, f->x, f->y);
 			} else {
 				// manual update
 				lua_pushstring(L, "x");
@@ -1019,7 +1012,62 @@ void lua_frame(const unsigned char *img, int img_w, int img_h)
 		::img_w = img_w;
 		::img_h = img_h;
 		texture_new_frame(state, img, img_w, img_h, GL_LUMINANCE);
-		lua_call(state, 1, 0);
+		call_lua(state, 0, -2, "I", -1);
 	} else
 		lua_pop(state, 1);
+}
+
+void vcall_lua(lua_State *L, int nret, int idx, const char *args, va_list ap)
+{
+	int top = lua_gettop(L);
+	int narg = 0;
+
+	lua_pushvalue(L, idx);	// function
+	for(const char *cp = args; *cp; cp++) {
+		narg++;
+		switch(*cp) {
+		case 's':	// string
+			lua_pushstring(L, va_arg(ap, const char *));
+			break;
+
+		case 'r':	// reference
+			lua_rawgeti(L, LUA_REGISTRYINDEX, va_arg(ap, int));
+			break;
+
+		case 'I': {	// index
+			int idx = va_arg(ap, int);
+			if (idx < 0 && idx > LUA_REGISTRYINDEX)
+				idx = top + idx + 1;
+			lua_pushvalue(L, idx);
+			break;
+		}
+
+		case 'i':	// integer
+			lua_pushnumber(L, va_arg(ap, int));
+			break;
+
+		case 'f':	// double
+			lua_pushnumber(L, va_arg(ap, double));
+			break;
+
+		case 'n':	// nil
+			lua_pushnil(L);
+			break;
+
+		default:
+			printf("bad arg format %c\n", *cp);
+			exit(1);
+		}
+	}
+
+	lua_call(L, narg, nret);
+}
+
+void call_lua(lua_State *L, int nret, int idx, const char *args, ...)
+{
+	va_list ap;
+
+	va_start(ap, args);
+	vcall_lua(L, nret, idx, args, ap);
+	va_end(ap);
 }
