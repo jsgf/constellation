@@ -75,10 +75,66 @@ function drawframe(frame)
 end
 
 -- a source of unique numeric identifiers
-unique = coroutine.wrap(function () 
-			   local count = 1
-			   while true do
-			      coroutine.yield(count)
-			      count = count+1
-			   end
-			end)
+do
+   local count=0
+
+   function unique()
+      count = count+1
+      return count
+   end
+end
+
+-- round n up to m
+function roundup(n, m)
+   return math.ceil(n/m)*m
+end
+
+-- apply f to each element of list, returning a new list
+function map(f, list)
+   local ret={}
+
+   for k,v in pairs(list) do
+      ret[k] = f(k,v)
+   end
+
+   return ret
+end
+
+-- draw a graph of memory use
+do
+   local history={}
+   local memmax=100		--initial scale
+   local tgtmemmax=memmax
+   local maxhist=200		--size of sample history
+
+   function drawmemuse(frame) 
+      local xscale=frame.width / maxhist
+      local yscale=(frame.height / 3) / memmax
+
+      local info={ gcinfo() }
+      local function coord(x,y)
+	 return { x=x*xscale, y=frame.height-y*yscale }
+      end
+
+      tgtmemmax = roundup(math.max(tgtmemmax, info[2]), 100)
+      memmax = memmax + (tgtmemmax-memmax) * .1
+
+      table.insert(history, info)
+      if table.getn(history) > maxhist then
+	 table.remove(history, 1)
+      end
+
+      gfx.setstate{colour={0,1,1,1}, blend='none'}
+      gfx.line(unpack(map(function (k,v) return coord(k, v[1]) end, history)))
+      gfx.setstate{colour={1,1,0,1}}
+      gfx.line(unpack(map(function (k,v) return coord(k, v[2]) end, history)))
+      
+      gfx.setstate{colour={.5,.5,.5,.5}, blend='alpha'}
+      for y = 0,tgtmemmax,100 do
+	 gfx.line(coord(0, y), coord(maxhist, y))
+      end
+      gfx.setstate{colour={1, 1, 1, 1}, blend='none'}
+      gfx.line(coord(0, tgtmemmax), coord(maxhist, tgtmemmax))
+   end
+end
+

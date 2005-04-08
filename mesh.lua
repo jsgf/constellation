@@ -3,7 +3,7 @@ require('bokstd')
 blob = gfx.texture('blob.png')
 
 
-t = tracker.new(50, 80)
+t = tracker.new(50, 200)
 
 m = mesh.new()
 
@@ -86,7 +86,7 @@ end
 -- for an edge to recycle before deciding to create a new one, so that
 -- any per-edge state is preserved.
 function m:newedge(v1, v2)
-   --print('v1:', v1.x, v1.y, 'v2: ',v2.x, v2.y)
+   --print('v1:', v1, 'v2: ',v2)
 
    e = nonmeshedges:find(v1, v2)
    if e then
@@ -148,6 +148,20 @@ function features:add(idx, x, y, weight)
    --print('add pt.__mesh=',pt.__mesh)
 end
 
+function roundup(n, m)
+   return math.ceil(n/m)*m
+end
+
+function map(f, list)
+   local ret={}
+
+   for k,v in pairs(list) do
+      ret[k] = f(k,v)
+   end
+
+   return ret
+end
+
 function process_frame(frame)
    t:track(features)
 
@@ -157,7 +171,8 @@ function process_frame(frame)
    features:foreach('draw')
 
    gfx.setstate{colour={}, blend='none'}
-   for _,e in {m:edges()} do
+
+   for e in m:edges() do
       local p1,p2 = e[1], e[2]
       --print('p1=',p1.x,p1.y, 'p2=',p2.x,p2.y)
 
@@ -179,5 +194,9 @@ function process_frame(frame)
 	 
 	 gfx.line(p1, p2)
       end
-   end      
+   end
+
+   drawmemuse(frame)   
+
+   --print('gcinfo=', gcinfo())
 end

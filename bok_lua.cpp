@@ -668,7 +668,7 @@ static int gfx_line(lua_State *L)
 	int narg = lua_gettop(L);
 
 	if (narg < 2)
-		luaL_error(L, "need at least two points");
+		return 0;
 
 	glBegin(GL_LINE_STRIP);
 

@@ -270,7 +270,7 @@ static void bok_edge_destroy (GtsObject * object)
 		// remove decoration
 		pushref(L, e->ref);
 		undecorate(L, -1);
-
+		lua_pop(L, 1);
 
 		// drop reference
 		luaL_unref(L, LUA_REGISTRYINDEX, e->ref);
@@ -501,6 +501,7 @@ struct surface_foreach {
 	lua_State *L;
 	int count;
 	int meshidx;
+	int setidx;
 };
 
 static gint foreach_vertex_func(gpointer item, gpointer data)
@@ -527,15 +528,17 @@ static int mesh_points(lua_State *L)
 
 	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
 
-	gts_surface_foreach_vertex(mesh->surface, foreach_vertex_func, &data);
+	gts_surface_foreach_vertex(mesh->surface,
+				   foreach_vertex_func, &data);
 
 	return data.count;
 }
 
 // Construct a new edge table. This consists of two verticies at
 // indicies 1 and 2, and a __mesh entry which points back to the
-// BokEdge.
-static void make_edge(lua_State *L, int meshidx, BokEdge *e, BokVertex *v1, BokVertex *v2)
+// BokEdge.  Leaves the new edge on the top of the stack.
+static void make_edge(lua_State *L, int meshidx,
+		      BokEdge *e, BokVertex *v1, BokVertex *v2)
 {
 	assert(e->L  == L);
 	assert(v1->L == L);
@@ -569,26 +572,36 @@ static void make_edge(lua_State *L, int meshidx, BokEdge *e, BokVertex *v1, BokV
 	e->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 }
 
+// Store an edge in an edge set at setidx; entries are of the form e=e
+static void store_lua_edge(lua_State *L, int meshidx, int setidx, BokEdge *e)
+{
+	GtsSegment *s = GTS_SEGMENT(e);
+	bool ok = true;
+
+	if (e->ref != LUA_NOREF) {
+		pushref(L, e->ref);
+	} else if (IS_BOK_VERTEX(s->v1) && IS_BOK_VERTEX(s->v2)) {
+		e->L = L;
+		make_edge(L, meshidx, e,
+			  BOK_VERTEX(s->v1), BOK_VERTEX(s->v2));
+	} else
+		ok = false;
+
+	if (ok) {
+		lua_pushvalue(L, -1);
+		lua_settable(L, setidx);
+	}
+}
+
 static gint foreach_edge_func(gpointer item, gpointer data)
 {
 	struct surface_foreach *edata = (struct surface_foreach *)data;
 	
-	if (IS_BOK_EDGE(item) && GTS_IS_SEGMENT(item)) {
-		BokEdge *e = BOK_EDGE(item);
-		GtsSegment *s = GTS_SEGMENT(item);
-		lua_State *L = edata->L;
+	if (IS_BOK_EDGE(item)) {
+		assert(GTS_IS_SEGMENT(item));
 
-		lua_checkstack(L, edata->count+5);
-
-		if (e->ref != LUA_NOREF) {
-			pushref(L, e->ref);
-			edata->count++;
-		} else 	if (IS_BOK_VERTEX(s->v1) && IS_BOK_VERTEX(s->v2)) {
-			e->L = edata->L;
-			make_edge(L, edata->meshidx, e,
-				  BOK_VERTEX(s->v1), BOK_VERTEX(s->v2));
-			edata->count++;
-		}
+		store_lua_edge(edata->L, edata->meshidx, edata->setidx,
+			      BOK_EDGE(item));
 	}
 
 	return 0;
@@ -597,27 +610,39 @@ static gint foreach_edge_func(gpointer item, gpointer data)
 static int mesh_edges(lua_State *L)
 {
 	struct mesh *mesh = mesh_get(L, 1);
-	int nargs = lua_gettop(L);
-	int ret = 0;
+	int narg = lua_gettop(L);
+	int setidx;
 
 	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
 
-	if (lua_istable(L, 2)) {
+	lua_newtable(L);
+	setidx = absidx(L, -1);
+
+	if (narg == 2 && lua_istable(L, 2)) {
 		void *d = getdecoration(L, 2);
 
-		if (d && GTS_IS_VERTEX(d)) {
+		if (d && IS_BOK_VERTEX(d)) {
 			// find edges attached to this point
 			GtsVertex *v = GTS_VERTEX(d);
+
+			for(GSList *s = v->segments; 
+			    s != NULL; 
+			    s = s->next) {
+				if (!IS_BOK_EDGE(s->data))
+					continue;
+				store_lua_edge(L, 1, setidx, 
+					       BOK_EDGE(s->data));
+			}
 		}
 	} else {
 		// return everything
-		struct surface_foreach data = { L, 0, 1 };
+		struct surface_foreach data = { L, 0, 1, setidx };
 
-		gts_surface_foreach_edge(mesh->surface, foreach_edge_func, &data);
-		ret = data.count;
+		gts_surface_foreach_edge(mesh->surface, 
+					 foreach_edge_func, &data);
 	}
 
-	return ret;
+	return 1;
 }
 
 // taken from cdt.c; check that a face is still in a consistent triangulation
