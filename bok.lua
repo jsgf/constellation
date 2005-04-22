@@ -34,7 +34,7 @@ function particle(x, y, dx, dy, life)
       local sb = math.sqrt(b)
 
       gfx.setstate({ colour={sb, b, b, b}, blend="add" })
-      gfx.sprite(self.x, self.y, 10, star)
+      gfx.sprite(self, 10, star)
    end
 
    return pt
@@ -67,7 +67,7 @@ function lostpoint(lostpt)
       local b = 1 - (self.age/10)
       --print("age=",self.age,"b=",b)
       gfx.setstate({colour={b,b,b,b}, blend="alpha"})
-      gfx.sprite(self.x, self.y, self.size, butterfly)
+      gfx.sprite(self, self.size, butterfly)
    end
 
    particles[pt] = pt
@@ -85,7 +85,7 @@ function trackpoint(x, y, weight)
 	 gfx.setstate({colour={1,1,1,1}, blend="alpha"})
       end
 
-      gfx.sprite(self.x, self.y, 20, butterfly)
+      gfx.sprite(self, 20, butterfly)
    end
 
    function pt.move(self, x, y)

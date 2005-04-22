@@ -10,7 +10,7 @@ function trackpoint(x, y, w)
 
    -- drawing function
    function pt.draw(self)
-      gfx.sprite(self.x, self.y, 5, star)
+      gfx.sprite(self, 5, star)
    end
 
    -- We could also define "move" and "lost" functions here, if we

@@ -15,10 +15,10 @@ function process_frame(frame)
    gfx.setstate({colour={}, blend='none'})
    if history[1] then
       local prev = history[1]
-      gfx.sprite(prev.width/2, prev.height/2, nil, prev)
+      gfx.sprite({x=prev.width/2, y=prev.height/2}, nil, prev)
    end
 
    --show current frame masked by Lua logo
    gfx.setstate({blend='alpha'})
-   gfx.sprite(frame.width/2, frame.height/2, nil, frame, lua)
+   gfx.sprite({x=frame.width/2, y=frame.height/2}, nil, frame, lua)
 end

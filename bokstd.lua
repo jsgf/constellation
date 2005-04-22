@@ -69,9 +69,15 @@ function clamp(n, min, max)
    return n
 end
 
+function dist(p1, p2)
+   local dx,dy = p1.x-p2.x,p1.y-p2.y
+   return math.sqrt(dx*dx+dy*dy)
+end
+
+
 function drawframe(frame)
    gfx.setstate({colour={}, blend='none'})
-   gfx.sprite(frame.width/2, frame.height/2, nil, frame)
+   gfx.sprite({x=frame.width/2, y=frame.height/2}, nil, frame)
 end
 
 -- a source of unique numeric identifiers
@@ -124,17 +130,20 @@ do
 	 table.remove(history, 1)
       end
 
-      gfx.setstate{colour={0,1,1,1}, blend='none'}
-      gfx.line(unpack(map(function (k,v) return coord(k, v[1]) end, history)))
-      gfx.setstate{colour={1,1,0,1}}
-      gfx.line(unpack(map(function (k,v) return coord(k, v[2]) end, history)))
-      
+      -- draw scale
       gfx.setstate{colour={.5,.5,.5,.5}, blend='alpha'}
       for y = 0,tgtmemmax,100 do
 	 gfx.line(coord(0, y), coord(maxhist, y))
       end
       gfx.setstate{colour={1, 1, 1, 1}, blend='none'}
       gfx.line(coord(0, tgtmemmax), coord(maxhist, tgtmemmax))
+
+      -- actual memory use
+      gfx.setstate{colour={0,1,1,1}, blend='none'}
+      gfx.line(unpack(map(function (k,v) return coord(k, v[1]) end, history)))
+      -- gc threshold
+      gfx.setstate{colour={1,1,0,1}}
+      gfx.line(unpack(map(function (k,v) return coord(k, v[2]) end, history)))      
    end
 end
 

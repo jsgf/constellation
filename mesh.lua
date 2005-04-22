@@ -32,6 +32,7 @@ setmetatable(nonmeshedges, nme_meta)
 -- so each one has a set of edges associated with it.
 edgebyvert = {}
 function edgebyvert:add(e)
+   --print('add ', e[1], e[2])
    local function ins(v)
       -- insert a vertex, creating a new set if it did't exist
       if not self[v] then
@@ -43,6 +44,11 @@ function edgebyvert:add(e)
    ins(e[2])
 end
 function edgebyvert:remove(v)
+   -- vertex may not have edges yet
+   if not self[v] then
+      return
+   end
+
    for _,e in self[v] do	--for each edge in set
       --remove the other end
       self[e[1]][e] = nil
@@ -113,7 +119,7 @@ function pointmeta:lost(why)
    edgebyvert:remove(self)
 end
 function pointmeta:draw()
-   gfx.sprite(self.x, self.y, 5, blob)
+   gfx.sprite(self, 5, blob)
 end
 function pointmeta:move(x, y)
    self.x,self.y = x,y
@@ -148,30 +154,19 @@ function features:add(idx, x, y, weight)
    --print('add pt.__mesh=',pt.__mesh)
 end
 
-function roundup(n, m)
-   return math.ceil(n/m)*m
-end
-
-function map(f, list)
-   local ret={}
-
-   for k,v in pairs(list) do
-      ret[k] = f(k,v)
-   end
-
-   return ret
-end
-
 function process_frame(frame)
+   --print('Frame!', frame)
+
    t:track(features)
 
-   drawframe(frame)
+   --drawframe(frame)
 
    gfx.setstate{colour={1,1,0,1}, blend='alpha'}
    features:foreach('draw')
 
    gfx.setstate{colour={}, blend='none'}
 
+-- [[
    for e in m:edges() do
       local p1,p2 = e[1], e[2]
       --print('p1=',p1.x,p1.y, 'p2=',p2.x,p2.y)
@@ -185,7 +180,9 @@ function process_frame(frame)
 
       gfx.line(p1, p2)
    end
+--]]
 
+--[[
    gfx.setstate({colour={0,1,0}})
    for k,e in nonmeshedges do
       if k == e then
@@ -195,8 +192,19 @@ function process_frame(frame)
 	 gfx.line(p1, p2)
       end
    end
+--]]
+--[[
+   gfx.setstate{colour={1,1,0}}
+   for _,t in m:triangles() do
+      gfx.line(t[1], t[2], t[3], t[1])
+      --print(t[1], t[2], t[3])
+   end
+--]]
 
-   drawmemuse(frame)   
+   gfx.setstate{colour={.5,.5,.5,.5}, blend='alpha'}
+   m:draw(frame)
+
+   --drawmemuse(frame)   
 
    --print('gcinfo=', gcinfo())
 end

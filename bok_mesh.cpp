@@ -24,7 +24,7 @@
 //
 //  points(self)	-- return a list of all points
 //
-//  adjacent(self, pt)  -- return a list of points connected to pt
+//  connected(self, pt) -- return a list of points connected to pt
 //  edges(self, [pt])	-- return a list of edges attached to pt (or all)
 //  triangles(self, [pt])-- return a list of triangles with pt as a vertex (or all)
 //
@@ -34,11 +34,16 @@
 //
 //  newedge(pt, v1, v2) -- user supplied - if set, called to create an edge
 //
+//  draw(texture)	-- draw the mesh with texture stretched across it
+//			   each point in the mesh can have the following fields:
+//				tx,ty: texture coords; x,y used if missing
+//				color: vertex colour
+//
 // Object: edge
 //  points(self)	-- return tuple of points containing the edge
 //  triangles(self)	-- return the triangles on either side of 
 //                         edge (or nil if one is missing)
-//  remove(self)	-- user supplied - called if edge is removed from the mesh
+//  remove(self)	-- user supplied - called when edge is removed from the mesh
 //
 // Object: triangle
 //  points(self)	-- return triple of points
@@ -112,6 +117,8 @@ struct _BokVertex {
 
 	lua_State *L;		// Lua interpreter
 	int ref;		// reference to Lua data
+
+	int index;		// vertex index in mesh (temporary)
 };
 
 #define BOK_VERTEX(obj)            GTS_OBJECT_CAST (obj,\
@@ -504,7 +511,7 @@ struct surface_foreach {
 	int setidx;
 };
 
-static gint foreach_vertex_func(gpointer item, gpointer data)
+static gint points_func(gpointer item, gpointer data)
 {
 	struct surface_foreach *vdata = (struct surface_foreach *)data;
 
@@ -514,8 +521,8 @@ static gint foreach_vertex_func(gpointer item, gpointer data)
 		assert(vdata->L == v->L);
 
 		// push the referenced vertex to stack for return
-		lua_rawgeti(vdata->L, LUA_REGISTRYINDEX, v->ref);
-		vdata->count++;
+		pushref(vdata->L, v->ref);
+		lua_rawseti(vdata->L, vdata->setidx, ++vdata->count);
 	}
 
 	return 0;
@@ -524,14 +531,47 @@ static gint foreach_vertex_func(gpointer item, gpointer data)
 static int mesh_points(lua_State *L)
 {
 	struct mesh *mesh = mesh_get(L, 1);
-	struct surface_foreach data = { L, 0 };
+	int setidx;
 
 	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
 
-	gts_surface_foreach_vertex(mesh->surface,
-				   foreach_vertex_func, &data);
+	lua_newtable(L);
+	setidx = absidx(L, -1);
 
-	return data.count;
+	struct surface_foreach data = { L, 0, 1, setidx };
+
+	gts_surface_foreach_vertex(mesh->surface,
+				   points_func, &data);
+
+	return 1;
+}
+
+static int mesh_connected(lua_State *L)
+{
+	struct mesh *mesh = mesh_get(L, 1);
+	GtsVertex *v = (GtsVertex *)GTS_IS_VERTEX(getdecoration(L, 2));
+	GSList *list;
+
+	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
+	luaL_argcheck(L, v != NULL, 2, "'point' expected");
+
+	list = gts_vertex_neighbors(v, NULL, mesh->surface);
+
+	lua_newtable(L);
+	
+	for(GSList *p = list; p != NULL; p = p->next) {
+		BokVertex *bv = (BokVertex *)IS_BOK_VERTEX(p->data);
+
+		if (bv == NULL)
+			continue;
+
+		pushref(L, bv->ref);
+		lua_pushvalue(L, -1);
+		lua_settable(L, -3);
+	}
+	g_slist_free(list);
+
+	return 1;
 }
 
 // Construct a new edge table. This consists of two verticies at
@@ -546,17 +586,10 @@ static void make_edge(lua_State *L, int meshidx,
 
 	meshidx = absidx(L, meshidx);
 
-	lua_pushliteral(L, "newedge");
-	lua_gettable(L, meshidx);
-
-	if (lua_isfunction(L, -1)) {
-		call_lua(L, 1, -1, "Irr", meshidx, v1->ref, v2->ref);
-		lua_remove(L, -2); // remove function
+	if (call_lua(L, 1, meshidx, "newedge", "Irr", meshidx, v1->ref, v2->ref)) {
 		if (!lua_istable(L,-1))
 			luaL_error(L, "mesh:newedge didn't return an edge");
 	} else {
-		lua_pop(L, 1);	// drop non-function result
-
 		lua_newtable(L);
 
 		pushref(L, v1->ref);
@@ -593,7 +626,7 @@ static void store_lua_edge(lua_State *L, int meshidx, int setidx, BokEdge *e)
 	}
 }
 
-static gint foreach_edge_func(gpointer item, gpointer data)
+static gint edges_func(gpointer item, gpointer data)
 {
 	struct surface_foreach *edata = (struct surface_foreach *)data;
 	
@@ -618,7 +651,7 @@ static int mesh_edges(lua_State *L)
 	lua_newtable(L);
 	setidx = absidx(L, -1);
 
-	if (narg == 2 && lua_istable(L, 2)) {
+	if (narg >= 2 && lua_istable(L, 2)) {
 		void *d = getdecoration(L, 2);
 
 		if (d && IS_BOK_VERTEX(d)) {
@@ -639,7 +672,7 @@ static int mesh_edges(lua_State *L)
 		struct surface_foreach data = { L, 0, 1, setidx };
 
 		gts_surface_foreach_edge(mesh->surface, 
-					 foreach_edge_func, &data);
+					 edges_func, &data);
 	}
 
 	return 1;
@@ -682,7 +715,8 @@ static void adjust_edges(lua_State *L, GtsSurface *surface, BokVertex *v)
 
 	GSList *segments = NULL;
 
-	// save a list of interesting edges so we can restore them if needed
+	// save a list of interesting edges attached to this vertex so
+	// we can restore them if needed
 	for(GSList *s = GTS_VERTEX(v)->segments; s != NULL; s = s->next) {
 		if (IS_BOK_EDGE(s->data) && BOK_EDGE(s->data)->ref != LUA_NOREF)
 			segments = g_slist_prepend(segments, 
@@ -720,12 +754,9 @@ static void adjust_edges(lua_State *L, GtsSurface *surface, BokVertex *v)
 			assert(be->ref != LUA_NOREF);
 
 			pushref(L, be->ref);
-			lua_pushliteral(L, "remove");
-			lua_gettable(L, -2);
-			if (lua_isfunction(L, -1))
-				call_lua(L, 0, -1, "I", -2);
+			call_lua(L, 0, -1, "remove", "I", -1);
 					
-			lua_pop(L, 2);	// drop function and table
+			lua_pop(L, 1);	// drop table
 		}
 
 		gts_object_destroy(GTS_OBJECT(be));
@@ -778,6 +809,218 @@ static int mesh_move(lua_State *L)
 	return 0;
 }
 
+static bool make_triangle(lua_State *L, GtsTriangle *tri)
+{
+	GtsVertex *v1, *v2, *v3;
+
+	gts_triangle_vertices(tri, &v1, &v2, &v3);
+
+	if (!IS_BOK_VERTEX(v1) ||
+	    !IS_BOK_VERTEX(v2) ||
+	    !IS_BOK_VERTEX(v3))
+		return false;
+
+	lua_newtable(L);
+
+	pushref(L, BOK_VERTEX(v1)->ref);
+	lua_rawseti(L, -2, 1);
+
+	pushref(L, BOK_VERTEX(v2)->ref);
+	lua_rawseti(L, -2, 2);
+
+	pushref(L, BOK_VERTEX(v3)->ref);
+	lua_rawseti(L, -2, 3);
+
+	return true;
+}
+
+static gint triangles_face_func(gpointer item, gpointer data)
+{
+	struct surface_foreach *fdata = (struct surface_foreach *)data;
+	lua_State *L = fdata->L;
+	GtsTriangle *tri = GTS_TRIANGLE(item);
+	
+	if (make_triangle(L, tri))
+		lua_rawseti(L, fdata->setidx, ++fdata->count);
+
+	return 0;	
+}
+
+static int mesh_triangles(lua_State *L)
+{
+	struct mesh *mesh = mesh_get(L, 1);
+	int narg = lua_gettop(L);
+	int setidx;
+
+	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
+
+	lua_newtable(L);
+	setidx = absidx(L, -1);
+
+	if (narg >= 2 && lua_istable(L, 2)) {
+		BokVertex *d = (BokVertex *)IS_BOK_VERTEX(getdecoration(L, 2));
+
+		if (d != NULL) {
+			GSList *list = gts_vertex_faces(GTS_VERTEX(d), mesh->surface, NULL);
+			int idx = 1;
+		
+			for(GSList *t = list; t != NULL; t = t->next)
+				if (make_triangle(L, GTS_TRIANGLE(t->data)))
+					lua_rawseti(L, setidx, idx++);
+		}
+	} else {
+		struct surface_foreach data = { L, 0, 1, setidx };
+
+		gts_surface_foreach_face(mesh->surface, 
+					 triangles_face_func, &data);
+	}
+
+	return 1;
+}
+
+struct mesh_draw_struct
+{
+	lua_State *L;
+	float *coords;
+	float *texcoords;
+	GLushort *prims;
+	int nvert;
+	int nprim;
+};
+
+static gint draw_vertex_func(gpointer item, gpointer data)
+{
+	struct mesh_draw_struct *mds = (struct mesh_draw_struct *)data;
+	lua_State *L = mds->L;
+	float x, y;
+	float tx, ty;
+
+	if (!IS_BOK_VERTEX(item))
+		return 1;
+
+	BokVertex *v = BOK_VERTEX(item);
+
+	assert(v->L == L);
+	if (v->ref == LUA_NOREF)
+		return 1;
+
+	pushref(L, v->ref);
+
+	if (!get_xy(L, -1, &x, &y)) {
+		lua_pop(L, 1);
+		return 1;
+	}
+	tx = x;
+	ty = y;
+	
+	lua_pushliteral(L, "tx");
+	lua_gettable(L, -2);
+	if (lua_isnumber(L, -1))
+		tx = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_pushliteral(L, "ty");
+	lua_gettable(L, -2);
+	if (lua_isnumber(L, -1))
+		ty = lua_tonumber(L, -1);
+	lua_pop(L, 2);
+
+	v->index = mds->nvert;
+	mds->coords[mds->nvert*2+0] = x;
+	mds->coords[mds->nvert*2+1] = y;
+	mds->texcoords[mds->nvert*2+0] = tx;
+	mds->texcoords[mds->nvert*2+1] = ty;
+
+	mds->nvert++;
+
+	return 1;
+}
+
+static gint draw_face_func(gpointer item, gpointer data)
+{
+	struct mesh_draw_struct *mds = (struct mesh_draw_struct *)data;
+	GtsVertex *v1, *v2, *v3;
+	GtsTriangle *tri = GTS_TRIANGLE(item);
+
+	assert(GTS_IS_TRIANGLE(tri));
+
+	gts_triangle_vertices(tri, &v1, &v2, &v3);
+	if (!IS_BOK_VERTEX(v1) ||
+	    !IS_BOK_VERTEX(v2) ||
+	    !IS_BOK_VERTEX(v3))
+		return 1;
+
+	mds->prims[mds->nprim*3 + 0] = BOK_VERTEX(v1)->index;
+	mds->prims[mds->nprim*3 + 1] = BOK_VERTEX(v2)->index;
+	mds->prims[mds->nprim*3 + 2] = BOK_VERTEX(v3)->index;
+	mds->nprim++;
+
+	return 1;
+}
+
+static int mesh_draw(lua_State *L)
+{
+	struct mesh *mesh = mesh_get(L, 1);
+	struct texture *tex = texture_get(L, 2);
+	int nvert, nface;
+	float *coords, *texcoords;
+	GLushort *prims;
+
+	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
+	if (lua_gettop(L) >= 2)
+		luaL_argcheck(L, tex != NULL, 2, "'texture' expected");
+
+	nvert = gts_surface_vertex_number(mesh->surface);
+	nface = gts_surface_face_number(mesh->surface);
+
+	//printf("nvert=%d nface=%d\n", nvert, nface);
+
+	coords = new float[2 * nvert];	
+	texcoords = new float[2 * nvert];
+
+	prims = new GLushort[3 * nface];
+
+	struct mesh_draw_struct mds = { L, coords, texcoords, prims, 0, 0 };
+
+	gts_surface_foreach_vertex(mesh->surface, draw_vertex_func, &mds);
+	gts_surface_foreach_face(mesh->surface, draw_face_func, &mds);
+
+	assert(mds.nvert <= nvert);
+	assert(mds.nprim <= nface);
+
+	render_indexed_mesh(tex, mds.nvert, coords, texcoords, mds.nprim, prims);
+
+	delete[] coords;
+	delete[] texcoords;
+	delete[] prims;
+
+	return 0;
+}
+
+static int mesh_stab(lua_State *L)
+{
+	struct mesh *mesh = mesh_get(L, 1);
+	float x, y;
+	GtsPoint *pt;
+
+	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
+
+	if (!get_xy(L, 2, &x, &y))
+		luaL_argerror(L, 2, "'point' expected");
+
+	pt = gts_point_new(gts_point_class(), x, y, 0);
+
+	GtsFace *f = gts_point_locate(pt, mesh->surface, NULL);
+
+	gts_object_destroy(GTS_OBJECT(pt));
+
+	if (f && GTS_IS_TRIANGLE(f)) 
+		make_triangle(L, GTS_TRIANGLE(f));
+	else
+		lua_pushnil(L);
+	return 1;
+}
+
 // mesh userdata meta
 static const luaL_reg meshuser_meta[] = {
 	{ "__gc",	mesh_gc },
@@ -791,6 +1034,12 @@ static const luaL_reg mesh_meta[] = {
 
 	{ "points",	mesh_points },
 	{ "edges",	mesh_edges },
+	{ "triangles",	mesh_triangles },
+	{ "connected",	mesh_connected },
+
+	{ "stab",	mesh_stab },
+
+	{ "draw",	mesh_draw },
 
 	{0,0}
 };

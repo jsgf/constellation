@@ -55,7 +55,7 @@ function smokept(x, y, intens)
       end
 
       gfx.setstate({colour={b, b, b, b}})
-      gfx.sprite(self.x, self.y, size, blob)
+      gfx.sprite(self, size, blob)
    end
 
    function pt.update(self)
@@ -142,7 +142,7 @@ function trackpoint(x, y, weight)
 
       -- set the colour depending on the temperature
       gfx.setstate({colour=gradient(incandescent, temp)})
-      gfx.sprite(self.x, self.y, scale, blob)
+      gfx.sprite(self, scale, blob)
    end
 
    -- Movement is simple; it just keeps track of the previous

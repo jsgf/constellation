@@ -182,11 +182,7 @@ static int tracker_track(lua_State *L)
 		} else if ((f->val >= 0) && lua_isnil(L, -1)) {
 			// new feature
 			// look for "add" method in features
-			lua_pushstring(L, "add");
-			lua_gettable(L, 2);
-			if (lua_isfunction(L, -1)) {
-				call_lua(L, 0, -1, "Iifff", 2, lidx, f->x, f->y, f->val);
-			} else {
+			if (!call_lua(L, 0, 2, "add", "Iifff", 2, lidx, f->x, f->y, f->val)) {
 				lua_pushnumber(L, lidx);
 				lua_newtable(L);
 
@@ -210,11 +206,7 @@ static int tracker_track(lua_State *L)
 			// update feature
 			
 			// look for "move" in point
-			lua_pushstring(L, "move");
-			lua_gettable(L, 3);
-			if (lua_isfunction(L, -1)) {
-				call_lua(L, 0, -1, "Iff", -2, f->x, f->y);
-			} else {
+			if (!call_lua(L, 0, 3, "move", "Iff", -1, f->x, f->y)) {
 				// manual update
 				lua_pushstring(L, "x");
 				lua_pushnumber(L, f->x);
@@ -360,7 +352,7 @@ struct texture {
 
 static int texture_gc(lua_State *L);
 
-static struct texture *texture_get(lua_State *L, int idx)
+struct texture *texture_get(lua_State *L, int idx)
 {
 	return (struct texture *)luaL_checkudata(L, idx, "bokchoi.texture");
 }
@@ -722,14 +714,14 @@ static int gfx_sprite(lua_State *L)
 	int narg = lua_gettop(L);
 	int ntex = 0;
 
-	if (narg < 4)
-		luaL_error(L, "sprite(x, y, nil|size|{width, height}, texture, [texture...])");
+	if (narg < 3)
+		luaL_error(L, "sprite(pt, nil|size|{width, height}, texture, [texture...])");
 
-	x = lua_tonumber(L, 1);
-	y = lua_tonumber(L, 2);
+	if (!get_xy(L, 1, &x, &y))
+		luaL_argerror(L, 1, "'point' expected");
 
-	for(int i = 4; i <= narg; i++)
-		if (lua_isuserdata(L, i))
+	for(int i = 3; i <= narg; i++)
+		if (texture_get(L, i))
 			ntex++;
 
 	if (ntex == 0)
@@ -742,7 +734,7 @@ static int gfx_sprite(lua_State *L)
 
 	{
 		int idx = 0;
-		for(int i = 4; i <= narg; i++)
+		for(int i = 3; i <= narg; i++)
 			if (lua_isuserdata(L, i))
 				t[idx++] = texture_get(L, i);
 		assert(idx == ntex);
@@ -756,8 +748,8 @@ static int gfx_sprite(lua_State *L)
 	height = t[0]->height;
 
 	// Get either a size number or a {width,height} table
-	if (lua_isnumber(L, 3)) {
-		float size = lua_tonumber(L, 3);
+	if (lua_isnumber(L, 2)) {
+		float size = lua_tonumber(L, 2);
 
 		if (t[0]->width > t[0]->height) {
 			width = size;
@@ -766,13 +758,13 @@ static int gfx_sprite(lua_State *L)
 			height = size;
 			width = (t[0]->width * size) / t[0]->height;
 		}
-	} else if (lua_istable(L, 3)) {
+	} else if (lua_istable(L, 2)) {
 		lua_pushnumber(L, 1);
-		lua_gettable(L, 3);
+		lua_gettable(L, 2);
 		width = lua_tonumber(L, -1);
 
 		lua_pushnumber(L, 2);
-		lua_gettable(L, 3);
+		lua_gettable(L, 2);
 		height = lua_tonumber(L, -1);
 		
 		lua_pop(L, 2);
@@ -826,6 +818,61 @@ static int gfx_sprite(lua_State *L)
 
 	return 0;
 }
+
+void render_indexed_mesh(struct texture *tex, 
+			 int nvert, 
+			 float *coords, float *texcoords,
+			 int nprims, GLushort *prims)
+{
+	// coords are screen coords
+	// texcoords are in the original texture coordinate space
+	// no texture if tex is NULL or texcoords==NULL
+
+	if (tex == NULL || texcoords == NULL) {
+		tex = NULL;
+		texcoords = NULL;
+	}
+
+	if (coords == NULL || prims == NULL || nvert == 0 || nprims == 0)
+		return;
+
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glVertexPointer(2, GL_FLOAT, 0, coords);
+	GLERR();
+
+	if (tex != NULL) {
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glTexCoordPointer(2, GL_FLOAT, 0, texcoords);
+		GLERR();
+
+		glEnable(tex->target);
+		glBindTexture(tex->target, tex->texid);
+
+		if (tex->target != GL_TEXTURE_RECTANGLE) {
+			glMatrixMode(GL_TEXTURE);
+			glLoadIdentity();
+			glScalef(1./tex->width, 1./tex->height, 1);
+			glMatrixMode(GL_MODELVIEW);
+		}
+	}
+
+	glDrawElements(GL_TRIANGLES, nprims*3, GL_UNSIGNED_SHORT, prims);
+	GLERR();
+
+	glDisableClientState(GL_VERTEX_ARRAY);
+
+	if (tex) {
+		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+		glDisable(tex->target);
+
+		if (tex->target != GL_TEXTURE_RECTANGLE) {
+			glMatrixMode(GL_TEXTURE);
+			glLoadIdentity();
+			glMatrixMode(GL_MODELVIEW);
+		}
+	}
+}
+
 
 // Expect to see a table on the stack at idx;
 // look for interesting elements
@@ -936,7 +983,15 @@ static void gfx_register(lua_State *L)
    ---------------------------------------------------------------------- */
 static int panic(lua_State *L)
 {
+	lua_Debug debug;
+	int depth;
+
 	fprintf(stderr, "%s\n", lua_tostring(L, -1));
+
+	for(depth = 1; lua_getstack(L, depth, &debug); depth++) {
+		lua_getinfo(L, "nlS", &debug);
+		printf("  %s:%d\n", debug.source, debug.currentline);
+	}
 
 	return 0;
 }
@@ -1005,24 +1060,30 @@ void lua_cleanup()
 void lua_frame(const unsigned char *img, int img_w, int img_h)
 {
 	// call process_frame, if any
-	lua_pushstring(state, "process_frame");
-	lua_gettable(state, LUA_GLOBALSINDEX);
-	if (lua_isfunction(state, -1)) {
-		::img = (unsigned char *)img;
-		::img_w = img_w;
-		::img_h = img_h;
-		texture_new_frame(state, img, img_w, img_h, GL_LUMINANCE);
-		call_lua(state, 0, -2, "I", -1);
-	} else
-		lua_pop(state, 1);
+	::img = (unsigned char *)img;
+	::img_w = img_w;
+	::img_h = img_h;
+	texture_new_frame(state, img, img_w, img_h, GL_LUMINANCE);
+	//printf(">>> %d\n", lua_gettop(state));
+	call_lua(state, 0, LUA_GLOBALSINDEX, "process_frame", "I", -1);
+	lua_pop(state, 1);	// pop frame
+	//printf("<<< %d\n", lua_gettop(state));
 }
 
-void vcall_lua(lua_State *L, int nret, int idx, const char *args, va_list ap)
+bool vcall_lua(lua_State *L, int nret, int tblidx, const char *name, const char *args, va_list ap)
 {
 	int top = lua_gettop(L);
 	int narg = 0;
 
-	lua_pushvalue(L, idx);	// function
+	tblidx = absidx(L, tblidx);
+	lua_pushstring(L, name);
+	lua_gettable(L, tblidx);
+
+	if (!lua_isfunction(L, -1)) {
+		lua_pop(L, 1);
+		return false;
+	}
+
 	for(const char *cp = args; *cp; cp++) {
 		narg++;
 		switch(*cp) {
@@ -1034,7 +1095,7 @@ void vcall_lua(lua_State *L, int nret, int idx, const char *args, va_list ap)
 			lua_rawgeti(L, LUA_REGISTRYINDEX, va_arg(ap, int));
 			break;
 
-		case 'I': {	// index
+		case 'I': {	// stack index
 			int idx = va_arg(ap, int);
 			if (idx < 0 && idx > LUA_REGISTRYINDEX)
 				idx = top + idx + 1;
@@ -1061,13 +1122,18 @@ void vcall_lua(lua_State *L, int nret, int idx, const char *args, va_list ap)
 	}
 
 	lua_call(L, narg, nret);
+
+	return true;
 }
 
-void call_lua(lua_State *L, int nret, int idx, const char *args, ...)
+bool call_lua(lua_State *L, int nret, int tblidx, const char *name, const char *args, ...)
 {
+	bool ret;
 	va_list ap;
 
 	va_start(ap, args);
-	vcall_lua(L, nret, idx, args, ap);
+	ret = vcall_lua(L, nret, tblidx, name, args, ap);
 	va_end(ap);
+
+	return ret;
 }

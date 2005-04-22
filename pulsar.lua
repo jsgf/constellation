@@ -24,7 +24,7 @@ function trackpoint(x, y, w)
       local size = (math.sin(phase) + 1) * logw*2 + 10
       phase = phase + step
 
-      gfx.sprite(self.x, self.y, size, star)
+      gfx.sprite(self, size, star)
    end
 
    -- We could also define "move" and "lost" functions here, if we

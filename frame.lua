@@ -36,15 +36,14 @@ function process_frame(frame)
       if f then
 	 local b = .3 / i
 	 gfx.setstate({blend='add', colour={b, b, b}})
-	 gfx.sprite(320/2, 240/2, f.width * (1 + (i-1)*.4), f)
+	 gfx.sprite({x=320/2, y=240/2}, f.width * (1 + (i-1)*.4), f)
       end
    end
 
    gfx.setstate({blend='alpha', colour={.5,.5,.2,1}})
    for i in features do
       if type(i) == 'number' then
-	 local x, y = features[i].x, features[i].y
-	 gfx.sprite(x, y, 24, star)
+	 gfx.sprite(features[i], 24, star)
       end
    end
 

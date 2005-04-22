@@ -389,6 +389,14 @@ int main(int argc, char **argv)
 	lua_setup(script);
 	atexit(lua_cleanup);
 
+	if (0) {
+		int samples;
+		
+		glEnable(GL_MULTISAMPLE);
+		glGetIntegerv(GL_SAMPLE_BUFFERS, &samples);
+		printf("samples=%d\n", samples);
+	}
+
 	while(!finished) {
 		handle_events();
 		display();
