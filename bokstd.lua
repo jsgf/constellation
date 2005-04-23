@@ -2,12 +2,20 @@
 
 features = {}
 
-function features.foreach(self, func)
+function features:points()
+   local ret = {}
+
    for i in self do
       if type(i) == 'number' then
-	 p = features[i]
-	 p[func](p)
+	 ret[i] = self[i]
       end
+   end
+   return ret
+end
+
+function features:foreach(func)
+   for _,p in self:points() do
+      p[func](p)
    end
 end
 
