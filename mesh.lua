@@ -119,9 +119,16 @@ function pointmeta:lost(why)
    edgebyvert:remove(self)
 end
 function pointmeta:draw()
+   gfx.setstate{colour=self.colour}
    gfx.sprite(self, 5, blob)
 end
 function pointmeta:move(x, y)
+   table.insert(self.history, 1, {x=self.x, y=self.y})
+   table.remove(self.history)
+
+   local dx,dy
+   dx = self.x - x
+   dy = self.y - y
    self.x,self.y = x,y
    m:move(self)
 end
@@ -147,6 +154,12 @@ end
 function features:add(idx, x, y, weight)
    pt = { x=x, y=y, key='pt'..unique() }
 
+   local h = {}
+   table.setn(h, 30)
+   pt.history = h
+
+   pt.colour = {r=math.random(), g=math.random(), b=math.random()}
+
    setmetatable(pt, pointmeta)
 
    self[idx] = pt
@@ -159,14 +172,14 @@ function process_frame(frame)
 
    t:track(features)
 
-   --drawframe(frame)
+   drawframe(frame)
 
    gfx.setstate{colour={1,1,0,1}, blend='alpha'}
    features:foreach('draw')
 
    gfx.setstate{colour={}, blend='none'}
 
--- [[
+--[[
    for e in m:edges() do
       local p1,p2 = e[1], e[2]
       --print('p1=',p1.x,p1.y, 'p2=',p2.x,p2.y)
@@ -202,7 +215,7 @@ function process_frame(frame)
 --]]
 
    gfx.setstate{colour={.5,.5,.5,.5}, blend='alpha'}
-   m:draw(frame)
+   --m:draw(frame)
 
    --drawmemuse(frame)   
 

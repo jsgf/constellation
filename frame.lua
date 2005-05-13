@@ -1,6 +1,6 @@
 
 history={}
-table.setn(history, 4)
+table.setn(history, 20)
 
 t = tracker.new(20, 40)
 
@@ -16,6 +16,7 @@ function features.add(self, idx, x, y)
 end
 
 star = gfx.texture('star-la.png')
+blob = gfx.texture('blob.png')
 
 function process_frame(frame)
    average={x=0, y=0, count=0}
@@ -34,9 +35,9 @@ function process_frame(frame)
       local f = history[i]
 
       if f then
-	 local b = .3 / i
+	 local b = .2 / i
 	 gfx.setstate({blend='add', colour={b, b, b}})
-	 gfx.sprite({x=320/2, y=240/2}, f.width * (1 + (i-1)*.4), f)
+	 gfx.sprite({x=320/2, y=240/2}, f.width * (1 + (i-1)*.05), f)
       end
    end
 
