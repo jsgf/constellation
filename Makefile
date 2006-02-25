@@ -39,8 +39,8 @@ LUA_LIBS := -llua -llualib
 PNG_CFLAGS := $(shell libpng-config --cflags)
 PNG_LIBS := $(shell libpng-config --libs)
 
-GLIB_CFLAGS := $(shell glib-config --cflags)
-GLIB_LIBS := $(shell glib-config --libs)
+GLIB_CFLAGS := $(shell pkg-config --cflags glib-2.0)
+GLIB_LIBS := $(shell pkg-config --libs glib-2.0)
 
 GTS_CFLAGS :=
 GTS_LIBS := -lgts
@@ -63,7 +63,7 @@ icc_OPT:=-O3 -xN
 CC:=$($(COMPILER)_CC)
 CXX:=$($(COMPILER)_CXX)
 
-OPT:=$($(COMPILER)_OPT)
+OPT:=$($(COMPILER)_DEBUG)
 
 CPPFLAGS:= -I/usr/local/include \
 	-Iklt \

@@ -701,13 +701,17 @@ static int gfx_point(lua_State *L)
 	return 0;
 }
 
-// args: x y nil|size|{width,height} texture [texture...]
+// args: pt nil|size|{width,height} texture [texture...]
 //
 // Where size is the size of the longest edge; a nil or zero size
 // displays the full-sized texture.  The first texture is the base
 // texture, which is used for the size/position calculations.  The
-// other textures are multiplied in using multitexturing.
-
+// other textures are multiplied in using multitexturing (to the
+// extent the hardware supports it).
+//
+// pt is taken to be the centre of the the texture, so the sides are
+// at (pt.x-width/2, pt.x+width/2, pt.y-height/2, pt.y+height/2).  If
+// a transform is current, then these corner vertices are transformed.
 static int gfx_sprite(lua_State *L)
 {
 	float x, y, width, height;
@@ -821,7 +825,7 @@ static int gfx_sprite(lua_State *L)
 
 void render_indexed_mesh(struct texture *tex, 
 			 int nvert, 
-			 float *coords, float *texcoords,
+			 float *coords, float *texcoords, GLubyte *cols,
 			 int nprims, GLushort *prims)
 {
 	// coords are screen coords
@@ -856,10 +860,18 @@ void render_indexed_mesh(struct texture *tex,
 		}
 	}
 
+	if (cols) {
+		glEnableClientState(GL_COLOR_ARRAY);
+		glColorPointer(4, GL_UNSIGNED_BYTE, 0, cols);
+	}
+
 	glDrawElements(GL_TRIANGLES, nprims*3, GL_UNSIGNED_SHORT, prims);
 	GLERR();
 
 	glDisableClientState(GL_VERTEX_ARRAY);
+
+	if (cols)
+		glDisableClientState(GL_COLOR_ARRAY);
 
 	if (tex) {
 		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -873,11 +885,58 @@ void render_indexed_mesh(struct texture *tex,
 	}
 }
 
+bool get_colour(lua_State *L, int ctbl, float *col)
+{
+	static const char *channels[] = { "r", "g", "b", "a" };
+	bool ret = false;
+	int tbl;
+
+	ctbl = absidx(L, ctbl);
+
+	lua_pushliteral(L, "colour");
+	lua_gettable(L, ctbl);
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 1);
+		lua_pushliteral(L, "color");
+		lua_gettable(L, ctbl);
+		if (!lua_istable(L, -1)) {
+			lua_pop(L, 1);
+			return false;
+		}
+	}
+	tbl = absidx(L, -1);
+
+	for(int i = 0; i < 4; i++) {
+		lua_pushstring(L, channels[i]);
+		lua_gettable(L, tbl);
+
+		// if indexing by r,b,g,a doesn't work, also try 1,2,3,4
+		if (!lua_isnumber(L, -1)) {
+			lua_pop(L, 1);
+			lua_pushnumber(L, i+1);
+			lua_gettable(L, -2);
+
+			if (!lua_isnumber(L, -1)) {
+				lua_pop(L, 1);
+				continue;
+			}
+		}
+
+		ret = true;
+		col[i] = lua_tonumber(L, -1);
+		lua_pop(L, 1);
+	}
+	lua_pop(L, 1);
+
+	return ret;
+}
 
 // Expect to see a table on the stack at idx;
 // look for interesting elements
 static void setstate(lua_State *L, int idx)
 {
+	float col[4] = { 1, 1, 1, 1 };
+
 	int top = lua_gettop(L);
 
 	if (idx < 0)
@@ -886,41 +945,9 @@ static void setstate(lua_State *L, int idx)
 	if (lua_gettop(L) < 1 || !lua_istable(L, idx))
 		luaL_error(L, "state is not a table");
 
-	lua_pushstring(L, "colour");
-	lua_gettable(L, idx);
-	
-	if (!lua_istable(L, -1)) {
-		lua_pop(L, 1);
-		lua_pushstring(L, "color");
-		lua_gettable(L, idx);
-	}
-
-	if (lua_istable(L, -1)) {
-		// Colour is either { R, G, B, A } or { r=R, g=G, b=B, a=A }
-		// (or a mixture)
-		static const char *channels[] = { "r", "g", "b", "a" };
-		float col[4] = { 1, 1, 1, 1 };
-
-		for(int i = 0; i < 4; i++) {
-			lua_pushstring(L, channels[i]);
-			lua_gettable(L, -2);
-
-			if (!lua_isnumber(L, -1)) {
-				lua_pop(L, 1);
-				lua_pushnumber(L, i+1);
-				lua_gettable(L, -2);
-
-				if (!lua_isnumber(L, -1)) {
-					lua_pop(L, 1);
-					break;
-				}
-			}
-			col[i] = lua_tonumber(L, -1);
-			lua_pop(L, 1);
-		}
-
+	if (get_colour(L, idx, col))
 		glColor4fv(col);
-	}
+
 	lua_settop(L, top);
 
 	lua_pushstring(L, "blend");
@@ -953,7 +980,6 @@ static int gfx_setstate(lua_State *L)
 	return 0;
 }
 
-
 static const luaL_reg gfx_methods[] = {
 	// rendering operations
 	{ "line",	gfx_line },
@@ -970,9 +996,120 @@ static const luaL_reg gfx_methods[] = {
 	{0,0}
 };
 
+static bool get_number(lua_State *L, int idx, const char *field, 
+		       float *retp, float defl)
+{
+	bool ok;
+
+	lua_pushstring(L, field);
+	lua_gettable(L, idx);
+	*retp = defl;
+	ok = lua_isnumber(L, -1) || lua_isnil(L, -1);
+
+	if (lua_isnumber(L, -1))
+		*retp = lua_tonumber(L, -1);
+	  
+	lua_pop(L, 1);
+
+	return ok;
+}
+
+static bool get_matrix(lua_State *L, int idx,
+		       float *a, float *b, float *c, float *d, 
+		       float *tx, float *ty)
+{
+	idx = absidx(L, idx);
+
+	if (!lua_istable(L, idx))
+		return false;
+
+	return get_number(L, idx, "a", a, 1) &&
+		get_number(L, idx, "b", b, 0) &&
+		get_number(L, idx, "c", c, 0) &&
+		get_number(L, idx, "d", d, 1) &&
+		get_number(L, idx, "x", tx, 0) &&
+		get_number(L, idx, "y", ty, 0);
+}
+
+#define elem(r,c)	((c)*4 + (r))
+
+// push the modelview and multiply a new transform:
+// xform.mult matrix func args...
+static int xform_mult(lua_State *L)
+{
+	float matrix[16] = {	// column major
+		1, 0, 0, 0, 
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	};
+
+	if (!get_matrix(L, 1,
+			&matrix[elem(0,0)], &matrix[elem(0,1)],
+			&matrix[elem(1,0)], &matrix[elem(1,1)],
+			&matrix[elem(0,3)], &matrix[elem(1,3)]))
+		luaL_argerror(L, 1, "expecting matrix");
+
+	luaL_argcheck(L, lua_isfunction(L, 2), 2, "expecting function");
+
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	GLERR();
+	glMultMatrixf(matrix);
+
+	lua_call(L, lua_gettop(L) - 2, LUA_MULTRET);
+
+	glPopMatrix();
+
+	return lua_gettop(L) - 1;
+}
+
+// push the modelview and load a new transform
+// xform.push matrix func
+static int xform_load(lua_State *L)
+{
+	float matrix[16] = {	// column major
+		1, 0, 0, 0, 
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	};
+	float z[16];
+
+	glGetFloatv(GL_MODELVIEW_MATRIX, z);
+
+	if (!get_matrix(L, 1,
+			&matrix[elem(0,0)], &matrix[elem(0,1)],
+			&matrix[elem(1,0)], &matrix[elem(1,1)],
+			&matrix[elem(0,3)], &matrix[elem(1,3)]))
+		luaL_argerror(L, 1, "expecting matrix");
+
+	luaL_argcheck(L, lua_isfunction(L, 2), 2, "expecting function");
+
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	GLERR();
+	glLoadMatrixf(matrix);
+
+	lua_call(L, lua_gettop(L) - 2, LUA_MULTRET);
+
+	glPopMatrix();
+
+	return lua_gettop(L) - 1;
+}
+
+
+static const luaL_reg xform_methods[] = {
+	{ "mult",	xform_mult },
+	{ "load",	xform_load },
+
+	{0,0}
+};
+
 static void gfx_register(lua_State *L)
 {
 	luaL_openlib(L, "gfx", gfx_methods, 0);
+	luaL_openlib(L, "xform", xform_methods, 0);
 
 	luaL_newmetatable(L, "bokchoi.texture");
 	luaL_openlib(L, NULL, texture_meta, 0);

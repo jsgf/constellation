@@ -28,6 +28,8 @@
 //  edges(self, [pt])	-- return a list of edges attached to pt (or all)
 //  triangles(self, [pt])-- return a list of triangles with pt as a vertex (or all)
 //
+//  boundary(self)	-- return list of bounding edges
+//
 //  stab(self, pt)	-- return the triangle containing pt (if pt is a vertex
 //			   of multiple triangles then it will return any of
 //			   those triangles).  pt need not be a mesh vertex.
@@ -64,6 +66,7 @@ extern "C" {
 struct mesh
 {
 	GtsSurface *surface;
+	GtsVertex *boundary[3];	// bounding triangle
 };
 
 static void pushref(lua_State *L, int ref)
@@ -392,7 +395,9 @@ static int mesh_new(lua_State *L)
 	if (points == 0) {
 		// default bounding box is (-1000,-1000)(1000,1000)
 		list = g_slist_prepend(list, gts_vertex_new(gts_vertex_class(), -1000, -1000, 0));
-		list = g_slist_prepend(list, gts_vertex_new(gts_vertex_class(), 1000, 1000, 0));
+		list = g_slist_prepend(list, gts_vertex_new(gts_vertex_class(),  1000, -1000, 0));
+		list = g_slist_prepend(list, gts_vertex_new(gts_vertex_class(),  1000,  1000, 0));
+		list = g_slist_prepend(list, gts_vertex_new(gts_vertex_class(), -1000,  1000, 0));
 	} else if (points == 1) {
 		// at least include 0,0
 		list = g_slist_prepend(list, gts_vertex_new(gts_vertex_class(), 0, 0, 0));
@@ -403,6 +408,8 @@ static int mesh_new(lua_State *L)
 	for(GSList *p = list; p != NULL; p = p->next)
 		gts_object_destroy(GTS_OBJECT(p->data));
 	g_slist_free(list);
+
+	gts_triangle_vertices(tri, &mesh->boundary[0], &mesh->boundary[1], &mesh->boundary[2]);
 
 	gts_surface_add_face(mesh->surface, gts_face_new(gts_face_class(), 
 							 tri->e1, tri->e2, tri->e3));
@@ -610,6 +617,9 @@ static void store_lua_edge(lua_State *L, int meshidx, int setidx, BokEdge *e)
 {
 	GtsSegment *s = GTS_SEGMENT(e);
 	bool ok = true;
+
+	meshidx = absidx(L, meshidx);
+	setidx = absidx(L, setidx);
 
 	if (e->ref != LUA_NOREF) {
 		pushref(L, e->ref);
@@ -883,9 +893,12 @@ struct mesh_draw_struct
 	lua_State *L;
 	float *coords;
 	float *texcoords;
+	GLubyte *cols;
 	GLushort *prims;
 	int nvert;
 	int nprim;
+	int ncols;
+	GLfloat *deflcol;
 };
 
 static gint draw_vertex_func(gpointer item, gpointer data)
@@ -894,6 +907,7 @@ static gint draw_vertex_func(gpointer item, gpointer data)
 	lua_State *L = mds->L;
 	float x, y;
 	float tx, ty;
+	float col[4];
 
 	if (!IS_BOK_VERTEX(item))
 		return 1;
@@ -923,13 +937,23 @@ static gint draw_vertex_func(gpointer item, gpointer data)
 	lua_gettable(L, -2);
 	if (lua_isnumber(L, -1))
 		ty = lua_tonumber(L, -1);
-	lua_pop(L, 2);
+	lua_pop(L, 1);
+
+	memcpy(col, mds->deflcol, sizeof(col));
+	if (get_colour(L, -1, col))
+		mds->ncols++;
+	lua_pop(L, 1);
 
 	v->index = mds->nvert;
 	mds->coords[mds->nvert*2+0] = x;
 	mds->coords[mds->nvert*2+1] = y;
 	mds->texcoords[mds->nvert*2+0] = tx;
 	mds->texcoords[mds->nvert*2+1] = ty;
+
+	mds->cols[mds->nvert*4+0] = (GLubyte)(col[0] * 255.);
+	mds->cols[mds->nvert*4+1] = (GLubyte)(col[1] * 255.);
+	mds->cols[mds->nvert*4+2] = (GLubyte)(col[2] * 255.);
+	mds->cols[mds->nvert*4+3] = (GLubyte)(col[3] * 255.);
 
 	mds->nvert++;
 
@@ -965,6 +989,8 @@ static int mesh_draw(lua_State *L)
 	int nvert, nface;
 	float *coords, *texcoords;
 	GLushort *prims;
+	GLubyte *cols;
+	GLfloat col[4];
 
 	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
 	if (lua_gettop(L) >= 2)
@@ -977,10 +1003,13 @@ static int mesh_draw(lua_State *L)
 
 	coords = new float[2 * nvert];	
 	texcoords = new float[2 * nvert];
+	cols = new GLubyte[4 * nvert];
 
 	prims = new GLushort[3 * nface];
 
-	struct mesh_draw_struct mds = { L, coords, texcoords, prims, 0, 0 };
+	glGetFloatv(GL_CURRENT_COLOR, col);
+
+	struct mesh_draw_struct mds = { L, coords, texcoords, cols, prims, 0, 0, 0, col };
 
 	gts_surface_foreach_vertex(mesh->surface, draw_vertex_func, &mds);
 	gts_surface_foreach_face(mesh->surface, draw_face_func, &mds);
@@ -988,11 +1017,13 @@ static int mesh_draw(lua_State *L)
 	assert(mds.nvert <= nvert);
 	assert(mds.nprim <= nface);
 
-	render_indexed_mesh(tex, mds.nvert, coords, texcoords, mds.nprim, prims);
+	render_indexed_mesh(tex, mds.nvert, coords, texcoords, mds.ncols > 0 ? cols : NULL,
+			    mds.nprim, prims);
 
 	delete[] coords;
 	delete[] texcoords;
 	delete[] prims;
+	delete[] cols;
 
 	return 0;
 }
@@ -1021,6 +1052,53 @@ static int mesh_stab(lua_State *L)
 	return 1;
 }
 
+// return a list of edges making up the mesh boundary.  This is
+// defined as the edge opposite the bounding triangle vertex in
+// triangles with one bounding triangle vertex.
+static int mesh_boundary(lua_State *L)
+{
+	struct mesh *mesh = mesh_get(L, 1);
+	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
+	GSList *vertices = NULL;
+
+	lua_newtable(L);
+	
+	vertices = g_slist_prepend(vertices, mesh->boundary[0]);
+	vertices = g_slist_prepend(vertices, mesh->boundary[1]);
+	vertices = g_slist_prepend(vertices, mesh->boundary[2]);
+
+	GSList *edges = gts_edges_from_vertices(vertices, mesh->surface);
+
+	GSList *triangles = gts_triangles_from_edges(edges);
+
+	for(GSList *t = triangles; t != NULL; t = t->next) {
+		GtsEdge *e[3];
+		int count = 0, idx = -1;
+
+		for(int i = 0; i < 3; i++) {
+			e[i] = gts_triangle_edge_opposite(GTS_TRIANGLE(t->data), mesh->boundary[i]);
+			if (e[i] != NULL) {
+				count++;
+				idx = i;
+			}
+		}
+
+		// there should only be one edge opposte a boundary
+		// vertex; if there is more than 1, then it means this
+		// triangle has a n edge at the boundary.
+		if (count != 1 || !IS_BOK_EDGE(e[idx]))
+			continue;
+		
+		store_lua_edge(L, 1, -1, BOK_EDGE(e[idx]));
+	}
+
+	g_slist_free(vertices);
+	g_slist_free(edges);
+	g_slist_free(triangles);
+
+	return 1;
+}
+
 // mesh userdata meta
 static const luaL_reg meshuser_meta[] = {
 	{ "__gc",	mesh_gc },
@@ -1036,6 +1114,8 @@ static const luaL_reg mesh_meta[] = {
 	{ "edges",	mesh_edges },
 	{ "triangles",	mesh_triangles },
 	{ "connected",	mesh_connected },
+
+	{ "boundary",	mesh_boundary },
 
 	{ "stab",	mesh_stab },
 

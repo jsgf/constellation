@@ -225,6 +225,7 @@ function features.add(self, idx, x, y, weight)
 end
 
 function process_frame(frame)
+   gfx.setstate{colour={1,1,1,1}}
    drawframe(frame)
 
    average={x=0, y=0}

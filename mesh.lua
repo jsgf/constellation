@@ -153,6 +153,7 @@ end
 --add a new tracked point to the features set
 function features:add(idx, x, y, weight)
    pt = { x=x, y=y, key='pt'..unique() }
+   pt.colour = { r=.5+math.random()*.5, g=.5+math.random()*.5, b=.5+math.random()*.5 }
 
    local h = {}
    table.setn(h, 30)
@@ -175,7 +176,7 @@ function process_frame(frame)
    drawframe(frame)
 
    gfx.setstate{colour={1,1,0,1}, blend='alpha'}
-   features:foreach('draw')
+   --features:foreach('draw')
 
    gfx.setstate{colour={}, blend='none'}
 

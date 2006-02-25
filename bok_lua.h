@@ -12,6 +12,7 @@ void lua_cleanup();
 
 struct lua_State;
 
+bool get_colour(struct lua_State *L, int idx, float col[4]);
 bool get_xy(struct lua_State *L, int idx, float *x, float *y);
 int absidx(struct lua_State *L, int idx);
 
@@ -27,7 +28,7 @@ struct texture *texture_get(lua_State *L, int idx);
 // Render a mesh of triangles
 void render_indexed_mesh(struct texture *tex, 
 			 int nvert, 
-			 float *coords, float *texcoords,
+			 float *coords, float *texcoords, GLubyte *cols,
 			 int nprims, GLushort *prims);
 
 #endif // BOK_LUA_H

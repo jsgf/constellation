@@ -155,12 +155,10 @@ static void reshape(int w, int h)
 
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluOrtho2D(0, cam->imageWidth(), 0, cam->imageHeight());
+	gluOrtho2D(0, cam->imageWidth(), cam->imageHeight(), 0);
 	
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-	glScalef(1, -1, 1);
-	glTranslatef(0, -cam->imageHeight(), 0);
 }
 
 static void keyboard(SDL_keysym *sym)
