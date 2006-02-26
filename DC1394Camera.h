@@ -14,8 +14,8 @@ class DC1394Camera: public Camera
 	bool	failed_;
 
 	raw1394handle_t		camhandle_;
-	dc1394_cameracapture	camera_;
-	dc1394_feature_set	features_;
+	dc1394camera_t		*camera_;
+	dc1394featureset_t	features_;
 
 	int format_;
 	int fps_;
