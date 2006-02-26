@@ -1102,6 +1102,8 @@ static int mesh_boundary(lua_State *L)
 // mesh userdata meta
 static const luaL_reg meshuser_meta[] = {
 	{ "__gc",	mesh_gc },
+
+	{0,0}
 };
 
 // mesh methods
