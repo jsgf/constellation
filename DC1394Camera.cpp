@@ -100,6 +100,8 @@ bool DC1394Camera::start()
 		return false;
 	}
 
+	failed_ = false;
+
 	if (!failed_)
 		buf_ = new unsigned char[imageSize()];
 
