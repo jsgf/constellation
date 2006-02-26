@@ -27,8 +27,8 @@ KLTOBJ:=$(addprefix klt/,$(KLTSRC:%.c=%.o))
 FREETYPE_CFLAGS := $(shell freetype-config --cflags)
 FREETYPE_LIBS := $(shell freetype-config --libs)
 
-MJPEGTOOLS_CFLAGS := $(shell mjpegtools-config --cflags)
-MJPEGTOOLS_LIBS := $(shell mjpegtools-config --libs)
+MJPEGTOOLS_CFLAGS := $(shell pkg-config mjpegtools --cflags)
+MJPEGTOOLS_LIBS := $(shell pkg-config mjpegtools --libs)
 
 SDL_CFLAGS := $(shell sdl-config --cflags)
 SDL_LIBS := $(shell sdl-config --libs)
