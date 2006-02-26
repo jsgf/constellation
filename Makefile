@@ -53,7 +53,7 @@ gcc_FLAGS:=-Wall
 icc_FLAGS:= -wd1418,981,810,279,530,383,191,1469
 
 gcc_DEBUG:=-ggdb -fno-inline -O
-gcc_OPT:=-ggdb -O3 -msse -mfpmath=sse -march=pentium-m
+gcc_OPT:=-ggdb -O3 -msse -mfpmath=sse 
 
 pcc_OPT:=-O3 -LNO:simd_verbose=ON -LNO:simd=2 -LNO:prefetch=2 #-fb_opt fbdata #  -g -fno-inline
 #pcc_OPT:=-Ofast -LNO:prefetch=2
