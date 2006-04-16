@@ -87,7 +87,7 @@ LIBS:= \
 	-L$(CGAL)/lib/$(CGALPLAT) -Wl,-rpath,$(CGAL)/lib/$(CGALPLAT) -lCGAL \
 	-lfftw3 \
 	-lz \
-	-ldc1394_control -lraw1394 \
+	-ldc1394 -lraw1394 \
 	-lm
 
 BOKLIBS = \
@@ -97,7 +97,7 @@ BOKLIBS = \
 	$(PNG_LIBS) \
 	$(GLIB_LIBS) \
 	$(GTS_LIBS) \
-	-lGLU -lGL -lz -ldc1394_control -lraw1394 -lm
+	-lGLU -lGL -lz -ldc1394 -lraw1394 -lm
 
 all: bokchoi
 

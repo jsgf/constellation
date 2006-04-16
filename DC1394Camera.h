@@ -6,7 +6,7 @@
 #include "Camera.h"
 
 #include <libraw1394/raw1394.h>
-#include <libdc1394/dc1394_control.h>
+#include <dc1394/dc1394_control.h>
 
 
 class DC1394Camera: public Camera
@@ -17,8 +17,8 @@ class DC1394Camera: public Camera
 	dc1394camera_t		*camera_;
 	dc1394featureset_t	features_;
 
-	int format_;
-	int fps_;
+	dc1394video_mode_t	format_;
+	dc1394framerate_t	fps_;
 
 	unsigned char *buf_;
 

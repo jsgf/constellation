@@ -25,8 +25,7 @@ bool DC1394Camera::start()
 	dc1394camera_t **cameras = NULL;
 	unsigned ncameras;
 	char *device_name = NULL;
-	unsigned int channel;
-	unsigned int speed;
+	dc1394speed_t speed;
 
 	failed_ = true;
 
@@ -53,8 +52,8 @@ bool DC1394Camera::start()
 	}
 	dc1394_print_feature_set(&features_);
 
-	if (dc1394_video_get_iso_channel_and_speed(camera_, &channel, &speed) != DC1394_SUCCESS) {
-		printf("can't get channel and speed\n");
+	if (dc1394_video_get_iso_speed(camera_, &speed) != DC1394_SUCCESS) {
+		printf("can't get speed\n");
 		return false;
 	}
 
@@ -66,13 +65,13 @@ bool DC1394Camera::start()
 	case SIF:
 	default:
 		size_ = SIF;
-		format_ = DC1394_MODE_320x240_YUV422; // 320x240 4:2:2
+		format_ = DC1394_VIDEO_MODE_320x240_YUV422; // 320x240 4:2:2
 		break;
 
 	case CIF:
 	case VGA:
 		size_ = VGA;
-		format_ = DC1394_MODE_640x480_YUV411; // 640x480 YUV4:1:1
+		format_ = DC1394_VIDEO_MODE_640x480_YUV411; // 640x480 YUV4:1:1
 		break;
 	}
 
@@ -83,10 +82,15 @@ bool DC1394Camera::start()
 	case 60:	fps_ = DC1394_FRAMERATE_60; break;
 	}
 
-	if (dc1394_dma_setup_capture(camera_, 1 /*channel*/,
-				     format_,
-				     speed, fps_, NUM_BUFFERS, DROP_FRAMES,
-				     device_name) != DC1394_SUCCESS) {
+	if (device_name != NULL && 
+	    dc1394_set_dma_device_filename(camera_, device_name) != DC1394_SUCCESS) {
+		printf("can't set device name\n");
+		return false;
+	}
+
+	if (dc1394_dma_setup_capture(camera_,
+				     format_, speed, fps_, 
+				     NUM_BUFFERS, DROP_FRAMES) != DC1394_SUCCESS) {
 		fprintf(stderr, "unable to setup camera- check line %d of %s to make sure\n",
 			__LINE__,__FILE__);
 		perror("that the video mode,framerate and format are supported\n");
@@ -137,7 +141,7 @@ const unsigned char *DC1394Camera::getFrame()
 
 	if (!failed_) {
 		switch(format_) {
-		case DC1394_MODE_640x480_YUV411: {
+		case DC1394_VIDEO_MODE_640x480_YUV411: {
 			const unsigned char *in = (const unsigned char *)camera_->capture.capture_buffer;
 			unsigned char *out = buf_;
 
@@ -148,7 +152,7 @@ const unsigned char *DC1394Camera::getFrame()
 			}
 			break;
 		}
-		case DC1394_MODE_320x240_YUV422: {
+		case DC1394_VIDEO_MODE_320x240_YUV422: {
 			const unsigned char *in = (const unsigned char *)camera_->capture.capture_buffer;
 			unsigned char *out = buf_;
 
@@ -161,6 +165,9 @@ const unsigned char *DC1394Camera::getFrame()
 
 			break;
 		}
+
+		default:
+			abort(); // never used
 		}
 		dc1394_dma_done_with_buffer(camera_);
 
