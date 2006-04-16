@@ -3,4 +3,5 @@ syntax:glob
 .deps/*
 *~
 *.raw
+*.orig
 bokchoi
