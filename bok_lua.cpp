@@ -28,6 +28,14 @@ extern "C" {
 #define GL_TEXTURE_RECTANGLE 0
 #endif
 
+#ifndef GL_GENERATE_MIPMAP
+#ifdef GL_SGIS_generate_mipmap
+#define GL_GENERATE_MIPMAP GL_GENERATE_MIPMAP_SGIS
+#else
+#define GL_GENERATE_MIPMAP 0
+#endif
+#endif	// GL_GENERATE_MIPMAP
+
 static lua_State *state;
 
 #define GLERR() _glerr(__FILE__, __LINE__);
@@ -47,6 +55,7 @@ static unsigned img_w, img_h;
 
 static bool ext_texture_rect;
 static int  max_texture_units;
+static bool ext_generate_mipmap;
 
 /* ----------------------------------------------------------------------
    Useful
@@ -608,9 +617,17 @@ static int texture_new_png(lua_State *L)
 
 		glBindTexture(GL_TEXTURE_2D, tex->texid);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		gluBuild2DMipmaps(GL_TEXTURE_2D, fmt, 
-				  texwidth, texheight, 
-				  fmt, GL_UNSIGNED_BYTE, pixels);
+		if (ext_generate_mipmap) {
+			glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP,
+					GL_TRUE);
+			glTexImage2D(GL_TEXTURE_2D, 0, fmt, 
+				     texwidth, texheight, 0,
+				     fmt, GL_UNSIGNED_BYTE, pixels);
+			GLERR();
+		} else
+			gluBuild2DMipmaps(GL_TEXTURE_2D, fmt, 
+					  texwidth, texheight, 
+					  fmt, GL_UNSIGNED_BYTE, pixels);
 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
 				GL_CLAMP_TO_EDGE);
@@ -1152,18 +1169,22 @@ void lua_setup(const char *src)
 	gfx_register(state);
 	mesh_register(state);
 
+	const GLubyte *exts = glGetString(GL_EXTENSIONS);
+
 	ext_texture_rect =
-		gluCheckExtension((GLubyte *)"GL_ARB_texture_rectangle",
-				  glGetString(GL_EXTENSIONS)) ||
-		gluCheckExtension((GLubyte *)"GL_EXT_texture_rectangle",
-				  glGetString(GL_EXTENSIONS)) ||
-		gluCheckExtension((GLubyte *)"GL_NV_texture_rectangle",
-				  glGetString(GL_EXTENSIONS));
+		gluCheckExtension((GLubyte *)"GL_ARB_texture_rectangle", exts) ||
+		gluCheckExtension((GLubyte *)"GL_EXT_texture_rectangle", exts) ||
+		gluCheckExtension((GLubyte *)"GL_NV_texture_rectangle", exts);
 	GLERR();
 
 	glGetIntegerv(GL_MAX_TEXTURE_UNITS, &max_texture_units);
 	GLERR();
 
+	ext_generate_mipmap =
+		GL_GENERATE_MIPMAP &&
+		gluCheckExtension((GLubyte *)"GL_SGIS_generate_mipmap", exts);
+	GLERR();
+		
 	ret = luaL_loadfile(L, src);
 	if (ret) {
 		const char *str = lua_tostring(L, -1);
