@@ -123,12 +123,6 @@ function pointmeta:draw()
    gfx.sprite(self, 5, blob)
 end
 function pointmeta:move(x, y)
-   table.insert(self.history, 1, {x=self.x, y=self.y})
-   table.remove(self.history)
-
-   local dx,dy
-   dx = self.x - x
-   dy = self.y - y
    self.x,self.y = x,y
    m:move(self)
 end
@@ -154,12 +148,6 @@ end
 function features:add(idx, x, y, weight)
    pt = { x=x, y=y, key='pt'..unique() }
    pt.colour = { r=.5+math.random()*.5, g=.5+math.random()*.5, b=.5+math.random()*.5 }
-
-   local h = {}
-   table.setn(h, 30)
-   pt.history = h
-
-   pt.colour = {r=math.random(), g=math.random(), b=math.random()}
 
    setmetatable(pt, pointmeta)
 
