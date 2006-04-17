@@ -103,6 +103,12 @@ all: bokchoi
 
 TESTPAT=tcf_sydney.o Indian_Head_320.o nbc-320.o
 
+constellation: \
+	main.o Camera.o DC1394Camera.o \
+	FeatureSet.o Feature.o VaultOfHeaven.o misc.o \
+	star.o $(TESTPAT) $(KLTOBJ) # Geom.o
+	$(CXX)  $(PROF) $(OPT) $(LDFLAGS) -o $@ $^ $(filter-out -L/usr/lib64,$(LIBS))
+
 bokchoi: bokchoi.o bok_lua.o bok_mesh.o \
 	Camera.o DC1394Camera.o \
 	$(KLTOBJ) $(TESTPAT)
@@ -135,6 +141,6 @@ testpat.o: nbc-320.raw Indian_Head_320.raw tcf_sydney.raw
 
 
 clean:
-	rm -f *.o klt/*.o .deps/*.d
+	rm -f *.o klt/*.o .deps/*.d constellation
 
 -include .deps/*.d

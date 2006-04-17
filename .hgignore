@@ -1,5 +1,7 @@
 syntax:glob
 *.o
-.deps
+.deps/*
 *~
 *.raw
+*.orig
+bokchoi
