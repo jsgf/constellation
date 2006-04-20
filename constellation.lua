@@ -1,172 +1,358 @@
 require('bokstd')
 
 blob = gfx.texture('blob.png')
+track = tracker.new(50, 200)
 
+-- A specific constellation
+do
+   local meta = {}
+   meta.__index = meta
 
-t = tracker.new(50, 200)
+   local function edge_key(p1, p2)
+      assert(p1 ~= p2)
 
-m = mesh.new()
-
--- Edges which aren't in the mesh.  Indexed by endpoints, 
--- so that we can find and recycle an edge here.
-nonmeshedges = {}
-nme_meta = {
-   add = function (self, e)
-	    self[e] = e
-	    self[e:key()] = e
-	 end,
-   remove = function (self, e)
-	       --print('removing',self[e],self[tostring(e)])
-	       self[e] = nil
-	       self[e:key()] = nil
-	    end,
-   find = function(self, v1, v2)
-	     return self[edgekey(v1,v2)]
-	  end
-}
-nme_meta.__index = nme_meta
-setmetatable(nonmeshedges, nme_meta)
-
--- Edges indexed by endpoint.
--- Each vertex has multiple edges (at least 2, for a triangulated mesh), 
--- so each one has a set of edges associated with it.
-edgebyvert = {}
-function edgebyvert:add(e)
-   --print('add ', e[1], e[2])
-   local function ins(v)
-      -- insert a vertex, creating a new set if it did't exist
-      if not self[v] then
-	 self[v] = {}
+      if p1.key > p2.key then
+	 p1,p2 = p2,p1
       end
-      self[v][e] = e		-- add edge to set
-   end
-   ins(e[1])
-   ins(e[2])
-end
-function edgebyvert:remove(v)
-   -- vertex may not have edges yet
-   if not self[v] then
-      return
+
+      return p1.key .. '-' .. p2.key
    end
 
-   for _,e in self[v] do	--for each edge in set
-      --remove the other end
-      self[e[1]][e] = nil
-      self[e[2]][e] = nil
-      nonmeshedges:remove(e)	--remove from nonmeshedges
-   end
-   self[v] = nil		--remove this vertex
-end
-
-
-edgemeta={
-   age = 20
-}
-edgemeta.__index = edgemeta
-
-function edgemeta:remove()
-   nonmeshedges:add(self)
-end
-
---use invarient keys of endpoints to build a key for the edge
-function edgekey(v1, v2)   
-   local p1,p2 = v1,v2
-   if p1.key > p2.key then
-      p1,p2 = p2,p1
-   end
-
-   local ret= p1.key .. '-' .. p2.key
-   --print ('edgekey', ret)
-   return ret
-end
-
-function edgemeta:key()
-   return edgekey(self[1], self[2])
-end
-
-function edgemeta:__tostring()
-   return string.format('%s - %s', tostring(self[1]), tostring(self[2]))
-end
-
--- Called to create a new mesh edge.  Check the nonmeshedges structure
--- for an edge to recycle before deciding to create a new one, so that
--- any per-edge state is preserved.
-function m:newedge(v1, v2)
-   --print('v1:', v1, 'v2: ',v2)
-
-   e = nonmeshedges:find(v1, v2)
-   if e then
-      --print('recycling', e)
-      nonmeshedges:remove(e)
-   else
-      e = {v1,v2}
-      setmetatable(e, edgemeta)
-
-      edgebyvert:add(e)
-      --print('creating',e)
-   end
-
-   e.age = edgemeta.age
-
-   return e
-end
-
---metatable for points
-pointmeta = {}
-pointmeta.__index = pointmeta
-function pointmeta:lost(why)
-   m:del(self)
-   edgebyvert:remove(self)
-end
-function pointmeta:draw()
-   gfx.setstate{colour=self.colour}
-   gfx.sprite(self, 5, blob)
-end
-function pointmeta:move(x, y)
-   self.x,self.y = x,y
-   m:move(self)
-end
-function pointmeta:__tostring()
-   return string.format('%g,%g', self.x, self.y)
-end
-function pointmeta.__lt(a,b)
-   if a.y == b.y then
-      if a.x < b.x then
-	 return a
-      else
-	 return b
+   function meta:add_star_edge(p, to)
+      --print('const add star '..tostring(p)..' -> '..tostring(to))
+      if self.stars[p] == nil then
+	 --print('  new star')
+	 self.stars[p] = { }
       end
-   else if a.y < b.y then
-	 return a
-      else
-	 return b
+      self.stars[p][to] = to
+   end
+
+   function meta:del_edge(ek)
+      --print('  remove edge '..ek)
+
+      assert(self.edges[ek] ~= nil)
+
+      p1,p2 = unpack(self.edges[ek])
+
+      --print(p1,p2)
+
+      --[[
+      for s,et in self.stars do
+	 print('  from ' .. tostring(s) .. ' -> ')
+	 for to,_ in et do
+	    print('    '..tostring(to))
+	 end
       end
+      --]]
+      assert(self.stars[p1] ~= nil)
+      assert(self.stars[p2] ~= nil)
+
+      self.stars[p1][p2] = nil
+      self.stars[p2][p1] = nil
+
+      self.edges[ek] = nil
+      self.num_edges = self.num_edges - 1
+   end
+
+   function meta:del_star(p)
+      --print(self,'const del star '..tostring(p))
+
+      assert(self.stars[p] ~= nil)
+
+      for _,to in self.stars[p] do
+	 local ek = edge_key(p, to)
+
+	 --print('  edge '..ek)
+	 self:del_edge(ek)
+      end
+
+      self.stars[p] = nil
+   end
+
+   function meta:add_edge(p1, p2)
+      local ek = edge_key(p1, p2)
+
+      if self.edges[ek] ~= nil then
+	 return
+      end
+
+      --print('add edge '..ek)
+      self.num_edges = self.num_edges + 1
+      self.edges[ek] = ({ p1, p2 })
+
+      self:add_star_edge(p1, p2)
+      self:add_star_edge(p2, p1)
+   end
+
+   function meta:hasedge(p1, p2)
+      local ek = edge_key(p1, p2)
+      return self.edges[ek] ~= nil
+   end
+
+   function meta:complete()
+      return self.num_edges >= 4
+   end
+
+   function meta:draw()
+      for _,e in self.edges do
+	 gfx.line(unpack(e))
+      end
+   end
+
+   function constellation(name)
+      ret = {
+	 num_edges = 0,
+	 edges = {},
+	 stars = {},
+	 name = name,
+      }
+
+      setmetatable(ret, meta)
+      return ret
+   end
+end
+
+-- Heavens.  This keeps track of all the stars which are part of
+-- constellations
+do
+   local meta = {}
+   meta.__index = meta
+
+   function meta:add_freestar(pt)
+      assert(self.freestars[pt] == nil)
+      assert(pt._freestar_idx == nil)
+
+      self.freestars[pt] = pt
+   end
+
+   function meta:del_freestar(pt)
+      --print('removing free ' .. tostring(pt))
+      assert(self.freestars[pt] ~= nil)
+
+      self.freestars[pt] = nil
+   end
+
+   function meta:add_star(pt)
+      --print('adding star ' .. tostring(pt))
+      assert(self.stars[pt] == nil)
+      self.stars[pt] = pt
+
+      self:add_freestar(pt)
+   end
+
+   function meta:del_star(pt)
+      --print('removing star ' .. tostring(pt))
+      assert(self.stars[pt] ~= nil)
+
+      -- remove from any constellations
+      if self.const[pt] ~= nil then
+	 self.const[pt]:del_star(pt)
+      end
+      
+      -- remove from other star sets
+      self.stars[pt] = nil
+
+      if self.freestars[pt] ~= nil then
+	 self:del_freestar(pt)
+      end
+   end
+
+   function neighbour_set(m, star)
+      local ret = {}
+
+      for _,p in m:connected(star) do
+	 -- print('  ' .. tostring(star) .. ' -> ' .. tostring(p))
+	 table.insert(ret, p)
+      end
+
+      return ret
+   end
+
+   function meta:make_constellation()
+      -- Build a nicely indexable table of free stars
+      local free = {}
+      for _,v in self.freestars do
+	 table.insert(free, v)
+      end
+
+      if table.getn(free) < 20 then
+	 -- not enough to get started
+	 return
+      end
+
+      -- first, create a mesh for all the stars
+      local m = mesh.new()
+
+      for _,p in self.stars do
+	 m:add(p)
+      end
+
+      -- find an initial star
+      local star = free[math.random(table.getn(free))]
+
+      assert(self.stars[star] ~= nil)
+
+      local const = constellation()
+      local conststars = {}
+
+      --print('new const')
+      while not const:complete() or math.random() < .2 do
+	 conststars[star] = star
+
+	 local neighbours = neighbour_set(m, star)
+	 local next = nil
+
+	 -- find the next step
+	 while table.getn(neighbours) > 0 do
+	    local idx = math.random(table.getn(neighbours))
+	    next = neighbours[idx]
+
+	    -- check to make sure the star isn't already part of an existing
+	    -- constellation and it isn't a double-back within the current one
+	    if self.const[next] == nil and not const:hasedge(star, next) then
+	       break		-- OK, use this one
+	    end
+	    next = nil
+	    table.remove(neighbours, idx)
+	 end
+
+	 if next == nil then
+	    -- failed to find a suitable next star
+	    break
+	 end
+
+	 --print('  edge('.. tostring(star) ..' -> '.. tostring(next) ..')')
+	 const:add_edge(star, next)
+	 star = next
+      end
+
+      -- if we were successful, add stars to constellation map
+      if const:complete() then
+	 for _,s in conststars do
+	    self.const[s] = const
+	    table.insert(self.const, const)
+	    self:del_freestar(s)
+	 end
+      end
+
+      -- clean up
+      for _,p in self.stars do
+	 m:del(p)
+      end
+   end
+
+   function meta:draw()
+      table.foreachi(self.const, function (_,c) c:draw() end)
+   end
+
+   function heavens()
+      h = {
+	 const = {},		-- constellations
+	 stars = {},		-- all stars
+	 freestars = {},	-- uncommitted stars
+      }
+
+      setmetatable(h, meta)
+
+      return h
+   end
+end
+
+
+-- Point class
+do
+   local meta = {}
+   meta.__index = meta
+
+   function meta:lost(why)
+      if self.state == 'mature' then
+	 vault:del_star(self)
+      end
+   end
+
+   function meta:draw()
+      gfx.setstate{colour = self.colour}
+      gfx.sprite(self, 5, blob)
+   end
+
+   function meta:move(x, y)
+      self.x, self.y = x,y
+   end
+
+   function meta:update()
+      self.age = self.age + 1
+      if self.state == 'new' and self.age > 10 then
+	 self.state = 'mature'
+	 vault:add_star(self)
+      end
+   end
+
+   function meta:__tostring()
+      --return string.format('%g,%g', self.x, self.y)
+      return self.key
+   end
+
+   function meta:__lt(a,b)
+      if a.y == b.y then
+	 if a.x < b.x then
+	    return a
+	 else
+	    return b
+	 end
+      else if a.y < b.y then
+	    return a
+	 else
+	    return b
+	 end
+      end
+   end
+
+   -- Constructor
+   function point(x,y)
+      pt = {
+	 x = x,
+	 y = y,
+	 key = 'pt'..unique(),
+	 age = 0,
+	 state = 'new'
+      }
+      pt.colour = {
+	 r = .5 + math.random() * .5,
+	 g = .5 + math.random() * .5,
+	 b = .5 + math.random() * .5
+      }
+      setmetatable(pt, meta)
+
+      return pt
    end
 end
 
 --add a new tracked point to the features set
 function features:add(idx, x, y, weight)
-   pt = { x=x, y=y, key='pt'..unique() }
-   pt.colour = { r=.5+math.random()*.5, g=.5+math.random()*.5, b=.5+math.random()*.5 }
-
-   setmetatable(pt, pointmeta)
+   pt = point(x, y)
 
    self[idx] = pt
-   m:add(pt)
+
    --print('add pt.__mesh=',pt.__mesh)
 end
+
+vault = heavens()
 
 function process_frame(frame)
    --print('Frame!', frame)
 
-   t:track(features)
+   track:track(features)
 
    drawframe(frame)
 
    gfx.setstate{colour={1,1,0,1}, blend='alpha'}
-   --features:foreach('draw')
+   features:foreach('update')
+   features:foreach('draw')
 
-   gfx.setstate{colour={}, blend='none'}
+   vault:make_constellation()
+
+   gfx.setstate{colour={1,1,0,1}, blend='none'}
+   vault:draw()
 
 --[[
    for e in m:edges() do
