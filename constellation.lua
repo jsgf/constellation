@@ -292,6 +292,15 @@ do
 		    end)
    end
 
+   function _heavens:cull(ratio)
+      table.foreach(self.const,
+		    function (_,c)
+		       if math.random() < ratio then
+			  self:del_const(c)
+		       end
+		    end)
+   end
+
    function heavens()
       h = {
 	 const = {},		-- constellations (set)
@@ -388,17 +397,26 @@ function process_frame(frame)
 
    track:track(features)
 
+   -- draw backdrop
    gfx.setstate{colour={.5,.5,.5,.5}, blend='none'}
    drawframe(frame)
 
-   gfx.setstate{colour={1,1,0,1}, blend='alpha'}
    features:foreach('update')
 
-
+   -- try to construct a new constellation
    vault:make_constellation()
 
+   -- draw all the constellations + stars
    vault:draw()
+   gfx.setstate{ blend='alpha' }
    features:foreach('draw')
 
-   drawmemuse(frame)   
+   -- thin things out a bit
+   if math.random() < .01 then
+      vault:cull(.7)
+   else
+      vault:cull(.001)
+   end
+
+   -- drawmemuse(frame)
 end
