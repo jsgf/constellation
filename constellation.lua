@@ -211,6 +211,18 @@ do
       return ret
    end
 
+   local function next_neighbour(nset)
+      local ret = nil
+
+      if table.getn(nset) > 0 then
+	 local idx = math.random(table.getn(nset))
+	 ret = nset[idx]
+	 table.remove(nset, idx)
+      end
+
+      return ret
+   end
+
    -- Build a new constellation
    function _heavens:make_constellation()
       -- Build a nicely indexable table of free stars
@@ -247,19 +259,13 @@ do
 	 local next = nil
 
 	 -- find the next step
-	 while table.getn(neighbours) > 0 do
-	    local idx = math.random(table.getn(neighbours))
-	    next = neighbours[idx]
+	 repeat
+	    next = next_neighbour(neighbours)
 
 	    -- check to make sure the star isn't already part of an existing
 	    -- constellation and it isn't a double-back within the current one
-	    if self.conststars[next] == nil and
-	       not const:hasedge(star, next) then
-	       break		-- OK, use this one
-	    end
-	    next = nil
-	    table.remove(neighbours, idx)
-	 end
+	 until next == nil or (self.conststars[next] == nil and
+			       not const:hasedge(star, next))
 
 	 if next == nil then
 	    -- failed to find a suitable next star
