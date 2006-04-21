@@ -168,11 +168,36 @@ do
 
       if c ~= nil then
 	 c:del_star(pt)
+
+	 if not c:complete() then
+	    self:del_const(c)
+	 end
       else
 	 self:del_freestar(pt)
       end
       
       self.stars[pt] = nil
+   end
+
+   function _heavens:del_const(c)
+      assert(self.const[c] == c)
+      self.const[c] = nil
+
+      for s,_ in c.stars do
+	 assert(self.conststars[s] == c)
+	 self.conststars[s] = nil
+	 self:add_freestar(s)
+      end
+   end
+
+   function _heavens:add_const(c)
+      assert(self.const[c] == nil)
+      self.const[c] = c
+
+      for s,_ in c.stars do
+	 self.conststars[s] = c
+	 self:del_freestar(s)
+      end
    end
 
    function neighbour_set(m, star)
@@ -213,9 +238,6 @@ do
       assert(self.conststars[star] == nil)
 
       local const = constellation(self)
-      local starset = {}
-
-      starset[star] = star
 
       -- print('new const')
       while not const:complete() or math.random() < .2 do
@@ -246,21 +268,11 @@ do
 
 	 const:add_edge(star, next)
 	 star = next
-	 starset[star] = star
       end
 
       -- if we were successful, add stars to constellation map
       if const:complete() then
-	 for _,s in starset do
-	    assert(self.conststars[s] == nil)
-	    assert(self.freestars[s] ~= nil)
-
-	    -- print('added star '..tostring(s)..' to const '..tostring(const))
-
-	    self.conststars[s] = const
-	    self.const[const] = const
-	    self:del_freestar(s)
-	 end
+	 self:add_const(const)
       end
 
       -- clean up
