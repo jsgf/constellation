@@ -315,40 +315,99 @@ do
    end
 end
 
+avg = { }
 
--- Point class
+-- Point class (really a star)
 do
    local _point = {}
    _point.__index = _point
 
    local mature_age = 10
+   local dying_time = 10
 
-   function _point:lost(why)
-      if self.state == 'mature' then
-	 vault:del_star(self)
+   local state_new = { }
+   local state_mature = { }
+   local state_dying = { }
+
+   function state_new.draw(self)
+      local fade = self.age / mature_age
+      gfx.setstate{colour = lerpcol(fade, {0,0,0,0}, self.colour)}
+      gfx.sprite(self, self.size * fade, blob)
+   end
+
+   function state_new.update(self)
+      self.age = self.age + 1
+      if self.age >= mature_age then
+	 self.state = state_mature
+	 
+	 vault:add_star(self)
       end
    end
 
-   function _point:draw()
-      local fade = 1.
-      if self.age < mature_age then
-	 fade = self.age / mature_age
-      end
+   function state_new.lost(self, why)
+   end
 
-      gfx.setstate{colour = lerpcol(fade, {0,0,0,0}, self.colour)}
+   function state_mature.draw(self)
+      gfx.setstate{colour = self.colour}
       gfx.sprite(self, self.size, blob)
    end
 
+   function state_mature.update(self)
+   end
+
+   function state_mature.lost(self, why)
+      vault:del_star(self)
+
+      if why ~= 'oob' then
+	 self.age = 0
+	 self.state = state_dying
+	 
+	 dying_stars[self] = self
+
+	 self.nova = {
+	    { 0, self.colour },
+	    { .5, { 1,1,1,1 } },
+	    { .75, { .5, 0, 0, .5 } },
+	    { 1, { 0,0,0,0 } },
+	 }
+      end
+   end
+
+   function state_dying.draw(self)
+      local fade = self.age / dying_time
+      
+      gfx.setstate{colour = gradient(self.nova, fade)}
+      gfx.sprite(self, self.size * (fade * 4 + 1), blob)
+   end
+
+   function state_dying.update(self)
+      self.x = self.x + avg.dx
+      self.y = self.y + avg.dy
+      
+      self.age = self.age + 1
+      if self.age > dying_time then
+	 dying_stars[self] = nil
+      end
+   end
+
+   function _point:lost(why)
+      self.state.lost(self, why)
+   end
+
    function _point:move(x, y)
+      avg.dx = avg.dx + x - self.x
+      avg.dy = avg.dy + y - self.y
+      avg.count = avg.count + 1
+
       self.x, self.y = x,y
    end
 
    function _point:update()
-      self.age = self.age + 1
-      if self.state == 'new' and self.age > mature_age then
-	 self.state = 'mature'
-	 vault:add_star(self)
-      end
+      self.state.update(self)
+   end
+
+   function _point:draw()
+      self.state.draw(self)
    end
 
    function _point:__tostring()
@@ -381,7 +440,7 @@ do
 	 key = 'pt'..unique(),
 
 	 age = 0,
-	 state = 'new'
+	 state = state_new,
       }
       pt.colour = randomcol()
       setmetatable(pt, _point)
@@ -400,7 +459,7 @@ function features:add(idx, x, y, weight)
 end
 
 vault = heavens()
-
+dying_stars = {}
 backdrop = nil
 
 function process_frame(frame)
@@ -419,21 +478,29 @@ function process_frame(frame)
       backdrop:add({x=frame.width, y=frame.height, colour=botcol})
    end
 
+   avg = { dx = 0, dy = 0, count = 0 }
    track:track(features)
+
+   if avg.count > 0 then
+      avg.dx = avg.dx / avg.count
+      avg.dy = avg.dy / avg.count
+   end
 
    -- draw backdrop
    gfx.setstate{ blend='none' }
    backdrop:draw(frame)
 
    features:foreach('update')
+   table.foreach(dying_stars, function (k,v) v:update() end)
 
    -- try to construct a new constellation
    vault:make_constellation()
 
    -- draw all the constellations + stars
-   gfx.setstate{ colour={ .5,.5,0.,.5}, blend='alpha' }
+   gfx.setstate{ colour={ .5,.5,0.,.5 }, blend='alpha' }
    vault:draw()
    features:foreach('draw')
+   table.foreach(dying_stars, function (k,v) v:draw() end)
 
    -- thin things out a bit
    if math.random() < .01 then
