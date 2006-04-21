@@ -1,6 +1,6 @@
 require('bokstd')
 
-blob = gfx.texture('blob.png')
+blob = gfx.texture('star-la.png')
 track = tracker.new(50, 200)
 
 function randomcol()
@@ -97,7 +97,6 @@ do
    end
 
    function _const:draw()
-      gfx.setstate{colour = self.colour}
       for _,e in self.edges do
 	 --[[
 	 self:valid_star(e[1])
@@ -121,7 +120,6 @@ do
 	 edges = {},
 	 stars = {},
 	 name = name,
-	 colour = randomcol(),
       }
 
       setmetatable(ret, _const)
@@ -330,7 +328,7 @@ do
 
    function _point:draw()
       gfx.setstate{colour = self.colour}
-      gfx.sprite(self, 5, blob)
+      gfx.sprite(self, self.size, blob)
    end
 
    function _point:move(x, y)
@@ -366,10 +364,12 @@ do
    end
 
    -- Constructor
-   function point(x,y)
+   function point(x,y, size)
       pt = {
 	 x = x,
 	 y = y,
+	 size = size,
+
 	 key = 'pt'..unique(),
 	 age = 0,
 	 state = 'new'
@@ -383,7 +383,7 @@ end
 
 --add a new tracked point to the features set
 function features:add(idx, x, y, weight)
-   pt = point(x, y)
+   pt = point(x, y, math.log(weight) * 2)
 
    self[idx] = pt
 
@@ -407,8 +407,8 @@ function process_frame(frame)
    vault:make_constellation()
 
    -- draw all the constellations + stars
+   gfx.setstate{ colour={ .5,.5,0.,.5}, blend='alpha' }
    vault:draw()
-   gfx.setstate{ blend='alpha' }
    features:foreach('draw')
 
    -- thin things out a bit

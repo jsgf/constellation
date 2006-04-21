@@ -191,7 +191,7 @@ static int tracker_track(lua_State *L)
 		} else if ((f->val >= 0) && lua_isnil(L, -1)) {
 			// new feature
 			// look for "add" method in features
-			if (!call_lua(L, 0, 2, "add", "Iifff", 2, lidx, f->x, f->y, f->val)) {
+			if (!call_lua(L, 0, 2, "add", "Iiffi", 2, lidx, f->x, f->y, f->val)) {
 				lua_pushnumber(L, lidx);
 				lua_newtable(L);
 
