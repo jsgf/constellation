@@ -392,14 +392,29 @@ end
 
 vault = heavens()
 
+backdrop = nil
+
 function process_frame(frame)
    --print('Frame!', frame)
+
+   if backdrop == nil then
+      -- create a simple mesh for drawing the backdrop
+      backdrop = mesh.new()
+
+      local topcol = {.04, .07, .51, 1}
+      local botcol = {  0, .58, .99, 1}
+
+      backdrop:add({x=0,           y=0,            colour=topcol})
+      backdrop:add({x=frame.width, y=0,            colour=topcol})
+      backdrop:add({x=0,           y=frame.height, colour=botcol})
+      backdrop:add({x=frame.width, y=frame.height, colour=botcol})
+   end
 
    track:track(features)
 
    -- draw backdrop
-   gfx.setstate{colour={.5,.5,.5,.5}, blend='none'}
-   drawframe(frame)
+   gfx.setstate{ blend='none' }
+   backdrop:draw(frame)
 
    features:foreach('update')
 
