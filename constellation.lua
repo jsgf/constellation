@@ -322,8 +322,10 @@ do
    local _point = {}
    _point.__index = _point
 
+   -- tunables
    local mature_age = 10
    local dying_time = 10
+   local weight_limit = 100
 
    local state_new = { }
    local state_mature = { }
@@ -339,8 +341,10 @@ do
       self.age = self.age + 1
       if self.age >= mature_age then
 	 self.state = state_mature
-	 
-	 vault:add_star(self)
+
+	 if self.weight > weight_limit then
+	    vault:add_star(self)
+	 end
       end
    end
 
@@ -356,7 +360,9 @@ do
    end
 
    function state_mature.lost(self, why)
-      vault:del_star(self)
+      if self.weight > weight_limit then
+	 vault:del_star(self)
+      end
 
       if why ~= 'oob' then
 	 self.age = 0
@@ -431,11 +437,12 @@ do
    end
 
    -- Constructor
-   function point(x,y, size)
+   function point(x,y, weight)
       pt = {
 	 x = x,
 	 y = y,
-	 size = size,
+	 size = math.log(weight) * 2,
+	 weight = weight,
 
 	 key = 'pt'..unique(),
 
@@ -451,7 +458,7 @@ end
 
 --add a new tracked point to the features set
 function features:add(idx, x, y, weight)
-   pt = point(x, y, math.log(weight) * 2)
+   pt = point(x, y, weight)
 
    self[idx] = pt
 
@@ -462,52 +469,67 @@ vault = heavens()
 dying_stars = {}
 backdrop = nil
 
+flip = Matrix()
+if false then
+   -- mirror image
+   flip:translate(320,0)
+   flip:scale(-1,1)
+end
+
 function process_frame(frame)
    --print('Frame!', frame)
+ 
+   local function _inner ()
+      if backdrop == nil then
+	 -- create a simple mesh for drawing the backdrop
+	 backdrop = mesh.new()
+	 
+	 local topcol = {.04, .07, .51, 1}
+	 local botcol = {  0, .58, .99, 1}
+	 local w = frame.width
+	 local h = frame.height
 
-   if backdrop == nil then
-      -- create a simple mesh for drawing the backdrop
-      backdrop = mesh.new()
+	 backdrop:add({x=0, y=0, colour=topcol})
+	 backdrop:add({x=w, y=0, colour=topcol})
+	 backdrop:add({x=0, y=h, colour=botcol})
+	 backdrop:add({x=w, y=h, colour=botcol})
+      end
 
-      local topcol = {.04, .07, .51, 1}
-      local botcol = {  0, .58, .99, 1}
+      avg = { dx = 0, dy = 0, count = 0 }
+      track:track(features)
 
-      backdrop:add({x=0,           y=0,            colour=topcol})
-      backdrop:add({x=frame.width, y=0,            colour=topcol})
-      backdrop:add({x=0,           y=frame.height, colour=botcol})
-      backdrop:add({x=frame.width, y=frame.height, colour=botcol})
+      if avg.count > 0 then
+	 avg.dx = avg.dx / avg.count
+	 avg.dy = avg.dy / avg.count
+      end
+
+      -- draw backdrop
+      gfx.setstate{ blend='none' }
+      backdrop:draw(frame)
+
+      features:foreach('update')
+      table.foreach(dying_stars, function (k,v) v:update() end)
+
+      -- try to construct a new constellation
+      vault:make_constellation()
+
+      -- draw all the constellations + stars
+      gfx.setstate{ colour={ .5,.5,0.,.5 }, blend='alpha' }
+      vault:draw()
+      features:foreach('draw')
+      table.foreach(dying_stars, function (k,v) v:draw() end)
+
+      -- thin things out a bit
+      local r = math.random()
+
+      if r < .002 then
+	 vault:cull(.7)
+      elseif r < .1 then
+	 vault:cull(.01)
+      end
    end
 
-   avg = { dx = 0, dy = 0, count = 0 }
-   track:track(features)
-
-   if avg.count > 0 then
-      avg.dx = avg.dx / avg.count
-      avg.dy = avg.dy / avg.count
-   end
-
-   -- draw backdrop
-   gfx.setstate{ blend='none' }
-   backdrop:draw(frame)
-
-   features:foreach('update')
-   table.foreach(dying_stars, function (k,v) v:update() end)
-
-   -- try to construct a new constellation
-   vault:make_constellation()
-
-   -- draw all the constellations + stars
-   gfx.setstate{ colour={ .5,.5,0.,.5 }, blend='alpha' }
-   vault:draw()
-   features:foreach('draw')
-   table.foreach(dying_stars, function (k,v) v:draw() end)
-
-   -- thin things out a bit
-   if math.random() < .01 then
-      vault:cull(.7)
-   else
-      vault:cull(.001)
-   end
+   xform.load(flip, _inner)
 
    -- drawmemuse(frame)
 end
