@@ -5,9 +5,10 @@ track = tracker.new(50, 200)
 
 function randomcol()
    return {
-      r = .5 + math.random() * .5,
-      g = .5 + math.random() * .5,
-      b = .5 + math.random() * .5
+      .5 + math.random() * .5,
+      .5 + math.random() * .5,
+      .5 + math.random() * .5,
+      1
    }
 end
 
@@ -320,6 +321,8 @@ do
    local _point = {}
    _point.__index = _point
 
+   local mature_age = 10
+
    function _point:lost(why)
       if self.state == 'mature' then
 	 vault:del_star(self)
@@ -327,7 +330,12 @@ do
    end
 
    function _point:draw()
-      gfx.setstate{colour = self.colour}
+      local fade = 1.
+      if self.age < mature_age then
+	 fade = self.age / mature_age
+      end
+
+      gfx.setstate{colour = lerpcol(fade, {0,0,0,0}, self.colour)}
       gfx.sprite(self, self.size, blob)
    end
 
@@ -337,7 +345,7 @@ do
 
    function _point:update()
       self.age = self.age + 1
-      if self.state == 'new' and self.age > 5 then
+      if self.state == 'new' and self.age > mature_age then
 	 self.state = 'mature'
 	 vault:add_star(self)
       end
@@ -371,6 +379,7 @@ do
 	 size = size,
 
 	 key = 'pt'..unique(),
+
 	 age = 0,
 	 state = 'new'
       }
