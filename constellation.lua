@@ -6,15 +6,6 @@ font = text.face('/usr/share/fonts/bitstream-vera/VeraBd.ttf', 12)
 
 track = tracker.new(50, 200)
 
-function randomcol()
-   return {
-      .5 + math.random() * .5,
-      .5 + math.random() * .5,
-      .5 + math.random() * .5,
-      1
-   }
-end
-
 -- An individual constellation
 do
    -- constellation meta table
@@ -327,7 +318,7 @@ do
 
    -- tunables
    local mature_age = 10
-   local dying_time = 10
+   local dying_time = 15
    local weight_limit = 100
 
    local state_new = { }
@@ -374,10 +365,12 @@ do
 	 dying_stars[self] = self
 
 	 self.nova = {
-	    { 0, self.colour },
-	    { .5, { 1,1,1,1 } },
-	    { .75, { .5, 0, 0, .5 } },
-	    { 1, { 0,0,0,0 } },
+	    {0.,   self.colour },
+	    { .3, { .792, .808, .996, .5 } },
+	    { .5, { 1.00, .960, .404, .8 } },
+	    { .6, { 1.00 * .6, .663 * .6, .322 * .6, .6 } },
+	    { .8, { 1.00 * .5, .392 * .5, .298 * .5, .5 } },
+	    { 1.,    { 0, 0, 0, 0 } },
 	 }
       end
    end
@@ -439,22 +432,42 @@ do
       end
    end
 
+   local main_sequence = {
+      { 1,     { 1.00, .392, .298, 1. } }, -- class M
+      { 200,   { 1.00, .663, .322, 1. } }, -- class K
+      { 700,   { 1.00, .960, .404, 1. } }, -- class G
+      { 1500,  { 1.00, 1.00, 1.00, 1. } }, -- class F
+      { 3000,  { .792, .808, .996, .9 } }, -- class A
+      { 8000,  { .545, .588, 1.00, .8 } }, -- class B
+      { 17000, { .392, .431, 1.00, .7 } }, -- class O
+   }
+
    -- Constructor
    function point(x,y, weight)
+      -- print('weight=',weight,'log=',math.log(weight))
       local pt = {
 	 x = x,
 	 y = y,
 	 size = math.log(weight) * 2,
 	 weight = weight,
+	 colour = gradient(main_sequence, weight),
 
 	 key = 'pt'..unique(),
 
 	 age = 0,
 	 state = state_new,
       }
-      pt.colour = randomcol()
+
       setmetatable(pt, _point)
 
+      local bias = .55
+      pt.colour = {
+	 bias + pt.colour[1] * (1-bias),
+	 bias + pt.colour[2] * (1-bias),
+	 bias + pt.colour[3] * (1-bias),
+	 pt.colour[4] }
+
+      --print('pt.color',unpack(pt.colour))
       return pt
    end
 end
