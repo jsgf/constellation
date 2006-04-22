@@ -3,15 +3,6 @@ require('bokstd')
 blob = gfx.texture('star-la.png')
 track = tracker.new(50, 200)
 
-function randomcol()
-   return {
-      .5 + math.random() * .5,
-      .5 + math.random() * .5,
-      .5 + math.random() * .5,
-      1
-   }
-end
-
 -- An individual constellation
 do
    -- constellation meta table
@@ -371,10 +362,10 @@ do
 	 dying_stars[self] = self
 
 	 self.nova = {
-	    { 0, self.colour },
-	    { .5, { 1,1,1,1 } },
+	    {0.,   self.colour },
+	    { .5,  { 1, 1, 1, 1 } },
 	    { .75, { .5, 0, 0, .5 } },
-	    { 1, { 0,0,0,0 } },
+	    {1.,   { 0, 0, 0, 0 } },
 	 }
       end
    end
@@ -436,22 +427,42 @@ do
       end
    end
 
+   local main_sequence = {
+      { 1,     { 255, 100,  76 } }, -- class M
+      { 200,   { 255, 169,  82 } }, -- class K
+      { 700,   { 255, 245, 103 } }, -- class G
+      { 1500,  { 255, 255, 255 } }, -- class F
+      { 3000,  { 202, 206, 254 } }, -- class A
+      { 8000,  { 139, 150, 255 } }, -- class B
+      { 17000, { 100, 110, 255 } }, -- class O
+   }
+
    -- Constructor
    function point(x,y, weight)
+      -- print('weight=',weight,'log=',math.log(weight))
       pt = {
 	 x = x,
 	 y = y,
 	 size = math.log(weight) * 2,
 	 weight = weight,
+	 colour = gradient(main_sequence, weight),
 
 	 key = 'pt'..unique(),
 
 	 age = 0,
 	 state = state_new,
       }
-      pt.colour = randomcol()
+
       setmetatable(pt, _point)
 
+      local bias = .55
+      pt.colour = {
+	 bias + (pt.colour[1] / 255) * (1-bias),
+	 bias + (pt.colour[2] / 255) * (1-bias),
+	 bias + (pt.colour[3] / 255) * (1-bias),
+	 1 }
+
+      --print('pt.color',unpack(pt.colour))
       return pt
    end
 end
