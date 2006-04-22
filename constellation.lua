@@ -3,6 +3,10 @@ require('bokstd')
 blob = gfx.texture('star-la.png')
 
 font = text.face('/usr/share/fonts/bitstream-vera/VeraBd.ttf', 12)
+names = {}
+for name in io.lines('names.txt') do
+   table.insert(names, name)
+end
 
 track = tracker.new(50, 200)
 
@@ -91,14 +95,54 @@ do
       return self.num_edges == 0
    end
 
+   function _const:update_name(tx, ty, angle)
+      local dx = tx - self.namepos.x
+      local dy = ty - self.namepos.y
+      local da = angle - self.nameangle
+
+      self.namepos.x = self.namepos.x + dx * .1
+      self.namepos.y = self.namepos.y + dy * .1
+      self.nameangle = self.nameangle + da * .1
+
+      font:draw(self.namepos, self.nameangle, self.name)
+   end
+
    function _const:draw()
+      local vx, vy = 0, 0
+      local mx, my = 0, 0
+      local count = 0
+
       for _,e in self.edges do
 	 --[[
 	 self:valid_star(e[1])
 	 self:valid_star(e[2])
 	 --]]
-	 gfx.line(unpack(e))
+	 local p1, p2 = unpack(e)
+
+	 gfx.line(p1, p2)
+
+	 mx = mx + p1.x + p2.x
+	 my = my + p1.y + p2.y
+
+	 count = count+2
+
+	 if p1.x < p2.x then
+	    vx = vx - (p1.x - p2.x)
+	    vy = vy - (p1.y - p2.y)
+	 else
+	    vx = vx + (p1.x - p2.x)
+	    vy = vy + (p1.y - p2.y)
+	 end
       end
+
+      if count ~= 0 then
+	 mx = mx / count
+	 my = my / count
+      end
+
+      local angle = math.atan2(vy, vx) * 180 / math.pi
+
+      self:update_name(mx, my, angle)
    end
 
    function _const:valid_star(pt)
@@ -114,9 +158,13 @@ do
 	 num_edges = 0,
 	 edges = {},
 	 stars = {},
+
 	 name = name,
+	 namepos = { x = math.random(2000)-1000, y = math.random(2000)-1000 },
+	 nameangle = math.random(360),
       }
 
+      -- print(ret.name)
       setmetatable(ret, _const)
       return ret
    end
@@ -172,9 +220,13 @@ do
       self.stars[pt] = nil
    end
 
+   local used_names = {}
+
    function _heavens:del_const(c)
       assert(self.const[c] == c)
       self.const[c] = nil
+
+      used_names[c.name] = nil
 
       for s,_ in c.stars do
 	 assert(self.conststars[s] == c)
@@ -187,10 +239,21 @@ do
       assert(self.const[c] == nil)
       self.const[c] = c
 
+      used_names[c.name] = true
+
       for s,_ in c.stars do
 	 self.conststars[s] = c
 	 self:del_freestar(s)
       end
+   end
+
+   local function unique_name()
+      local ret
+      repeat
+	 ret = names[math.random(table.getn(names))]
+      until used_names[ret] == nil
+
+      return ret
    end
 
    function neighbour_set(m, star)
@@ -242,7 +305,7 @@ do
       assert(self.stars[star] ~= nil)
       assert(self.conststars[star] == nil)
 
-      local const = constellation(self)
+      local const = constellation(self, unique_name())
 
       -- print('new const')
       while not const:complete() or math.random() < .2 do
