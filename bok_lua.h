@@ -6,6 +6,20 @@
 #include <stdarg.h>
 #include <GL/gl.h>
 
+// userdata texture structure
+struct texture {
+	GLuint texid;
+	int width;
+	int height;
+	int texwidth, texheight;
+
+	float tc[2*4];		// texture coord array
+
+	GLenum format;		// texture format
+	GLenum target;		// texture target
+};
+
+
 void lua_setup(const char *src);
 void lua_frame(const unsigned char *img, int width, int height);
 void lua_cleanup();
@@ -24,6 +38,16 @@ bool call_lua(struct lua_State *L, int nret,
 struct texture;
 
 struct texture *texture_get(lua_State *L, int idx);
+
+struct texture *texture_init(struct texture *tex,
+			     GLenum target, int width, int height, GLenum format);
+struct texture *texture_alloc(lua_State *L,
+			      GLenum target, int width, int height, GLenum format);
+void texture_init_texcoord(struct texture *tex, float w, float h);
+
+int texture_index(lua_State *L);
+int texture_gc(lua_State *L);
+
 
 // Render a mesh of triangles
 void render_indexed_mesh(struct texture *tex, 

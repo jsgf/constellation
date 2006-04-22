@@ -19,6 +19,7 @@ extern "C" {
 
 #include "bok_lua.h"
 #include "bok_mesh.h"
+#include "bok_text.h"
 
 #if GL_EXT_texture_rectangle
 #define GL_TEXTURE_RECTANGLE GL_TEXTURE_RECTANGLE_EXT
@@ -346,27 +347,45 @@ static int tracker_register(lua_State *L)
    Graphics interface
    ---------------------------------------------------------------------- */
 
-// userdata texture structure
-struct texture {
-	GLuint texid;
-	int width;
-	int height;
-	int texwidth, texheight;
+struct texture *texture_init(struct texture *tex,
+			     GLenum target, int width, int height, GLenum format)
+{
+	tex->width = width;
+	tex->height = height;
+	tex->format = format;
+	tex->target = target;
 
-	float tc[2*4];		// texture coord array
+	return tex;
+}
 
-	GLenum format;		// texture format
-	GLenum target;		// texture target
-};
+struct texture *texture_alloc(lua_State *L, GLenum target,
+			      int width, int height, GLenum format)
+{
+	struct texture *tex = (struct texture *)lua_newuserdata(L, sizeof(*tex));
 
-static int texture_gc(lua_State *L);
+	if (tex == NULL)
+		luaL_error(L, "can't allocate texture");
+
+	texture_init(tex, target, width, height, format);
+
+	return tex;
+}
 
 struct texture *texture_get(lua_State *L, int idx)
 {
-	return (struct texture *)luaL_checkudata(L, idx, "bokchoi.texture");
+	struct texture *ret;
+
+	ret = (struct texture *)luaL_checkudata(L, idx, "bokchoi.texture");
+
+	if (ret == NULL)
+		ret = (struct texture *)luaL_checkudata(L, idx, "bokchoi.glyph");
+	if (ret == NULL)
+		luaL_argcheck(L, ret != NULL, idx, "need 'texture' or 'glyph'");
+
+	return ret;
 }
 
-static int texture_index(lua_State *L)
+int texture_index(lua_State *L)
 {
 	struct texture *tex;
 	const char *str;
@@ -408,7 +427,7 @@ static unsigned power2(unsigned x)
 	return ret;
 }
 
-static void init_tex_tc(struct texture *tex, float w, float h)
+void texture_init_texcoord(struct texture *tex, float w, float h)
 {
 	tex->tc[0*2+0] = 0;
 	tex->tc[0*2+1] = 0;
@@ -435,10 +454,7 @@ static int texture_new_frame(lua_State *L,
 {
 	struct texture *tex;
 
-	tex = (struct texture *)lua_newuserdata(L, sizeof(*tex));
-	tex->width = width;
-	tex->height = height;
-	tex->format = fmt;
+	tex = texture_alloc(L, GL_TEXTURE_2D, width, height, fmt);
 
 	glGenTextures(1, &tex->texid);
 
@@ -451,7 +467,7 @@ static int texture_new_frame(lua_State *L,
 
 		// scale factor for 0..1 texture coords
 		// texture_rect textures have non-parametric coords
-		init_tex_tc(tex, width, height);
+		texture_init_texcoord(tex, width, height);
 
 		tex->target = GL_TEXTURE_RECTANGLE;
 	} else {
@@ -459,9 +475,9 @@ static int texture_new_frame(lua_State *L,
 		tex->texwidth = power2(width);
 		tex->texheight = power2(height);
 
-		init_tex_tc(tex, 
-			    (float)width / tex->texwidth,
-			    (float)height / tex->texheight);
+		texture_init_texcoord(tex, 
+				      (float)width / tex->texwidth,
+				      (float)height / tex->texheight);
 
 		tex->target = GL_TEXTURE_2D;
 	}
@@ -598,20 +614,16 @@ static int texture_new_png(lua_State *L)
 			memcpy(row, rows[r], rowbytes);
 		}
 
-		tex = (struct texture *)lua_newuserdata(L, sizeof(*tex));
+		tex = texture_alloc(L, GL_TEXTURE_2D, width, height, fmt);
 
 		glGenTextures(1, &tex->texid);
-		tex->width = width;
-		tex->height = height;
-		tex->format = fmt;
 		tex->texwidth = texwidth;
 		tex->texheight = texheight;
-		tex->target = GL_TEXTURE_2D;
 
-		init_tex_tc(tex, 
-			    (float)width / tex->texwidth,
-			    (float)height / tex->texheight);
-
+		texture_init_texcoord(tex, 
+				      (float)width / tex->texwidth,
+				      (float)height / tex->texheight);
+		
 		luaL_getmetatable(L, "bokchoi.texture");
 		lua_setmetatable(L, -2);
 
@@ -651,7 +663,7 @@ static int texture_new_png(lua_State *L)
 	return 1;
 }
 
-static int texture_gc(lua_State *L)
+int texture_gc(lua_State *L)
 {
 	struct texture *tex;
 
@@ -1168,6 +1180,7 @@ void lua_setup(const char *src)
 	tracker_register(state);
 	gfx_register(state);
 	mesh_register(state);
+	text_register(state);
 
 	const GLubyte *exts = glGetString(GL_EXTENSIONS);
 

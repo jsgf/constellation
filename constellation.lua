@@ -1,6 +1,9 @@
 require('bokstd')
 
 blob = gfx.texture('star-la.png')
+
+font = text.face('/usr/share/fonts/bitstream-vera/VeraBd.ttf', 12)
+
 track = tracker.new(50, 200)
 
 function randomcol()
@@ -115,7 +118,7 @@ do
    end
 
    function constellation(vault, name)
-      ret = {
+      local ret = {
 	 vault = vault,
 	 num_edges = 0,
 	 edges = {},
@@ -301,7 +304,7 @@ do
    end
 
    function heavens()
-      h = {
+      local h = {
 	 const = {},		-- constellations (set)
 	 conststars = {},	-- star -> const (map)
 
@@ -438,7 +441,7 @@ do
 
    -- Constructor
    function point(x,y, weight)
-      pt = {
+      local pt = {
 	 x = x,
 	 y = y,
 	 size = math.log(weight) * 2,
@@ -476,6 +479,7 @@ if false then
    flip:scale(-1,1)
 end
 
+angle = 0
 function process_frame(frame)
    --print('Frame!', frame)
  
