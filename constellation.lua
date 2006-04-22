@@ -315,7 +315,7 @@ do
 
    -- tunables
    local mature_age = 10
-   local dying_time = 10
+   local dying_time = 15
    local weight_limit = 100
 
    local state_new = { }
@@ -363,9 +363,11 @@ do
 
 	 self.nova = {
 	    {0.,   self.colour },
-	    { .5,  { 1, 1, 1, 1 } },
-	    { .75, { .5, 0, 0, .5 } },
-	    {1.,   { 0, 0, 0, 0 } },
+	    { .3, { .792, .808, .996, .5 } },
+	    { .5, { 1.00, .960, .404, .8 } },
+	    { .6, { 1.00 * .6, .663 * .6, .322 * .6, .6 } },
+	    { .8, { 1.00 * .5, .392 * .5, .298 * .5, .5 } },
+	    { 1.,    { 0, 0, 0, 0 } },
 	 }
       end
    end
@@ -428,13 +430,13 @@ do
    end
 
    local main_sequence = {
-      { 1,     { 255, 100,  76 } }, -- class M
-      { 200,   { 255, 169,  82 } }, -- class K
-      { 700,   { 255, 245, 103 } }, -- class G
-      { 1500,  { 255, 255, 255 } }, -- class F
-      { 3000,  { 202, 206, 254 } }, -- class A
-      { 8000,  { 139, 150, 255 } }, -- class B
-      { 17000, { 100, 110, 255 } }, -- class O
+      { 1,     { 1.00, .392, .298, 1. } }, -- class M
+      { 200,   { 1.00, .663, .322, 1. } }, -- class K
+      { 700,   { 1.00, .960, .404, 1. } }, -- class G
+      { 1500,  { 1.00, 1.00, 1.00, 1. } }, -- class F
+      { 3000,  { .792, .808, .996, .9 } }, -- class A
+      { 8000,  { .545, .588, 1.00, .8 } }, -- class B
+      { 17000, { .392, .431, 1.00, .7 } }, -- class O
    }
 
    -- Constructor
@@ -457,10 +459,10 @@ do
 
       local bias = .55
       pt.colour = {
-	 bias + (pt.colour[1] / 255) * (1-bias),
-	 bias + (pt.colour[2] / 255) * (1-bias),
-	 bias + (pt.colour[3] / 255) * (1-bias),
-	 1 }
+	 bias + pt.colour[1] * (1-bias),
+	 bias + pt.colour[2] * (1-bias),
+	 bias + pt.colour[3] * (1-bias),
+	 pt.colour[4] }
 
       --print('pt.color',unpack(pt.colour))
       return pt
