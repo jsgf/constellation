@@ -1,0 +1,17 @@
+body { 
+  background: #0a1182;
+  color: white;
+  A:link: white;
+  active-color: yellow;
+  visited-color: 
+}
+
+A:link { 
+  color: yellow;
+}
+A:active { 
+  color: yellow;
+}
+A:visited { 
+  color: #ea0;
+}
