@@ -29,6 +29,35 @@ static bool fullscreen = false;
 static bool finished = false;
 static bool paused = false;
 
+static const char *record_base = NULL;
+
+static const int BLOBSIZE = 64;
+extern const char blob[BLOBSIZE*BLOBSIZE];
+static GLuint blobtex;
+
+static int newfile(const char *base, const char *ext)
+{
+	int fd;
+	int count = 0;
+	char buf[strlen(base)+strlen(ext)+4+1+1];
+
+	while(count < 10000) {
+		sprintf(buf, "%s%04d%s", base, count++, ext);
+		fd = open(buf, O_CREAT|O_EXCL|O_WRONLY, 0660);
+		if (fd == -1) {
+			if (errno == EEXIST)
+				continue;
+			else
+				return -1;
+		} else
+			return fd;
+	}
+
+	errno = EEXIST;
+	return -1;
+}
+
+
 static struct vid_mode {
 	int w, h;
 } default_modes[] = {
@@ -223,6 +252,13 @@ static void keyboard(SDL_keysym *sym)
 		reshape(screen_w, screen_h);
 		break;
 
+	case SDLK_r:
+		if (!cam->isrecording())
+			cam->startRecord(newfile(record_base, ".y4m"));
+		else
+			cam->stopRecord();
+		break;
+
 	case SDLK_SPACE:
 		paused = !paused;
 		break;
@@ -261,28 +297,6 @@ static unsigned long long get_now()
 	return tv.tv_sec * 1000000ull + tv.tv_usec;
 }
 
-static int newfile(const char *base, const char *ext)
-{
-	int fd;
-	int count = 0;
-	char buf[strlen(base)+strlen(ext)+4+1+1];
-
-	while(count < 10000) {
-		sprintf(buf, "%s%04d%s", base, count++, ext);
-		fd = open(buf, O_CREAT|O_EXCL|O_WRONLY, 0660);
-		if (fd == -1) {
-			if (errno == EEXIST)
-				continue;
-			else
-				return -1;
-		} else
-			return fd;
-	}
-
-	errno = EEXIST;
-	return -1;
-}
-
 static void display(void)
 {
 	static const unsigned char *img;
@@ -299,6 +313,47 @@ static void display(void)
 	
 	lua_frame(img, img_w, img_h);
 
+	if (cam->isrecording()) {
+		glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT |
+			     GL_TEXTURE_BIT | GL_COLOR_BUFFER_BIT);
+
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
+		glLoadIdentity();
+		glTranslatef(8, 8, 0);
+
+		glBindTexture(GL_TEXTURE_2D, blobtex);
+
+		glEnable(GL_TEXTURE_2D);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		glColor4f(1,0,0,1);
+
+		const int size = 8;
+
+		glBegin(GL_TRIANGLE_FAN);
+		   glTexCoord2f(0, 0);
+		   glVertex2f(0, 0);
+
+		   glTexCoord2f(1, 0);
+		   glVertex2f(size, 0);
+
+		   glTexCoord2f(1, 1);
+		   glVertex2f(size, size);
+
+		   glTexCoord2f(0, 1);
+		   glVertex2f(0, size);
+		glEnd();
+
+		glPopMatrix();
+		glPopAttrib();
+	}
+
 	SDL_GL_SwapBuffers();
 }
 
@@ -311,15 +366,23 @@ int main(int argc, char **argv)
 
 	srandom(getpid());
 
-	while((opt = getopt(argc, argv, "ep:")) != EOF) {
+	while((opt = getopt(argc, argv, "ep:Rr:")) != EOF) {
 		switch(opt) {
 		case 'e':
 			fullscreen = true;
 			break;
 
 		case 'p':
-		  camera_file = optarg;
-		  break;
+			camera_file = optarg;
+			break;
+
+		case 'R':
+			cam_record = true;
+			break;
+
+		case 'r':
+			record_base = optarg;
+			break;
 
 		default:
 			fprintf(stderr, "Unknown option '%c'\n", opt);
@@ -337,6 +400,26 @@ int main(int argc, char **argv)
 	
 	if (optind == argc-1)
 		script = argv[optind];
+
+	if (record_base == NULL) {
+		const char *sb;
+		char *rb, *cp;
+
+		// chop of last piece of path, if present
+		sb = strrchr(script, '/');
+		if (sb == NULL)
+			sb = script;
+		else
+			sb++;	// skip '/'
+
+		// chop off extension
+		rb = strdup(sb);
+		cp = strrchr(rb, '.');
+		if (cp != NULL)
+			*cp = '\0';
+
+		record_base = rb;
+	}
 
 	if (camera_file) {
 		printf("opening %s...\n", camera_file);
@@ -364,7 +447,7 @@ int main(int argc, char **argv)
 	int rate = cam->getRate();
 
 	if (cam_record)
-		cam->startRecord(newfile("camera", ".y4m"));
+		cam->startRecord(newfile(record_base, ".y4m"));
 
 	SDL_WM_SetCaption("Constellation", "Constellation");
 	SDL_ShowCursor(0);
@@ -383,6 +466,13 @@ int main(int argc, char **argv)
 	GLint maxtex;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtex);
 	printf("max tex size %d\n", maxtex);
+
+	glGenTextures(1, &blobtex);
+	glBindTexture(GL_TEXTURE_2D, blobtex);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_INTENSITY,
+		     BLOBSIZE, BLOBSIZE,
+		     0, GL_LUMINANCE, GL_UNSIGNED_BYTE, blob);
 
 	lua_setup(script);
 	atexit(lua_cleanup);

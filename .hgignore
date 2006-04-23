@@ -6,3 +6,4 @@ syntax:glob
 *.orig
 bokchoi
 TAGS
+*.y4m
