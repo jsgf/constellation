@@ -142,7 +142,7 @@ do
 
       local angle = math.atan2(vy, vx) * 180 / math.pi
 
-      self:update_name(mx, my, angle)
+      --self:update_name(mx, my, angle)
    end
 
    function _const:valid_star(pt)
@@ -160,7 +160,7 @@ do
 	 stars = {},
 
 	 name = name,
-	 namepos = { x = math.random(2000)-1000, y = math.random(2000)-1000 },
+	 namepos = { x = math.random(640)-320+160, y = math.random(480)-240+120 },
 	 nameangle = math.random(360),
       }
 
@@ -549,7 +549,7 @@ dying_stars = {}
 backdrop = nil
 
 flip = Matrix()
-if false then
+if true then
    -- mirror image
    flip:translate(320,0)
    flip:scale(-1,1)
