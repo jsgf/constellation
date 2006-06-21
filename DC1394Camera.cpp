@@ -46,6 +46,7 @@ bool DC1394Camera::start()
 		dc1394_free_camera(cameras[i]);
 	free(cameras);
 
+	dc1394_cleanup_iso_channels_and_bandwidth(camera_);
 	if (dc1394_get_camera_feature_set(camera_, &features_) != DC1394_SUCCESS) {
 		printf("unable to get feature set\n");
 		return false;
