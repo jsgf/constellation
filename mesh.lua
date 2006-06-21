@@ -49,7 +49,7 @@ function edgebyvert:remove(v)
       return
    end
 
-   for _,e in self[v] do	--for each edge in set
+   for _,e in pairs(self[v]) do	--for each edge in set
       --remove the other end
       self[e[1]][e] = nil
       self[e[2]][e] = nil
@@ -156,7 +156,7 @@ function features:add(idx, x, y, weight)
    pt.colour = { r=.5+math.random()*.5, g=.5+math.random()*.5, b=.5+math.random()*.5 }
 
    local h = {}
-   table.setn(h, 30)
+   h[30] = nil
    pt.history = h
 
    pt.colour = {r=math.random(), g=math.random(), b=math.random()}
@@ -180,8 +180,8 @@ function process_frame(frame)
 
    gfx.setstate{colour={}, blend='none'}
 
---[[
-   for e in m:edges() do
+-- [[
+   for e in pairs(m:edges()) do
       local p1,p2 = e[1], e[2]
       --print('p1=',p1.x,p1.y, 'p2=',p2.x,p2.y)
 
@@ -198,7 +198,7 @@ function process_frame(frame)
 
 --[[
    gfx.setstate({colour={0,1,0}})
-   for k,e in nonmeshedges do
+   for k,e in pairs(nonmeshedges) do
       if k == e then
 	 local p1,p2 = e[1], e[2]
 	 --print('p1=',p1, 'p2=',p2)
@@ -209,7 +209,7 @@ function process_frame(frame)
 --]]
 --[[
    gfx.setstate{colour={1,1,0}}
-   for _,t in m:triangles() do
+   for _,t in pairs(m:triangles()) do
       gfx.line(t[1], t[2], t[3], t[1])
       --print(t[1], t[2], t[3])
    end
@@ -217,7 +217,7 @@ function process_frame(frame)
 
    gfx.setstate{colour={.5,.5,.5,.5}, blend='alpha'}
    --m:draw(frame)
-
+   
    --drawmemuse(frame)   
 
    --print('gcinfo=', gcinfo())

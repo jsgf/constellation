@@ -3,7 +3,7 @@ require('bokstd')
 blob = gfx.texture('blob.png')
 
 m = mesh.new()
-t = tracker.new(10,20)
+t = tracker.new(40,40)
 
 ptmeta = {}
 ptmeta.__index = ptmeta
@@ -25,7 +25,7 @@ function m:effect(origin, func, range)
       if d < range then
 	 func(pt, d)
 
-	 for p in self:connected(pt) do
+	 for p in pairs(self:connected(pt)) do
 	    if not visited[p] then
 	       visit(p)
 	    end
@@ -61,7 +61,7 @@ end
 
 width=320
 height=240
-step=10
+step=5
 across = math.floor(width/step)
 down = math.floor(height/step)
 
@@ -98,11 +98,11 @@ end
 function process_frame(frame)
    t:track(features)
 
-   for _,p in m:points() do
+   for _,p in pairs(m:points()) do
       p:update()
    end
 
-   for _,p in features:points() do
+   for _,p in pairs(features:points()) do
       p:update()
 
       function magnify(pt, dist)
@@ -132,23 +132,23 @@ function process_frame(frame)
 	 pt.ty = pt.ty + dy
       end
 
-      --m:effect(p, magnify, 50)
-      m:effect(p, twist, 50)
+      m:effect(p, magnify, 50)
+      --m:effect(p, twist, 50)
    end
 
    gfx.setstate{color={1,1,1,1}, blend='none'}
    m:draw(frame)
 
---[[	Draw features
+-- [[	Draw features
    gfx.setstate{color={1,1,0,1}, blend='alpha'}
-   for _,p in features:points() do
+   for _,p in pairs(features:points()) do
       gfx.sprite(p, 5, blob)
    end
 --]]
 
 --[[ Draw vectors
    gfx.setstate{color={.5,.5,0,.5}, blend='alpha'}
-   for _,p in m:points() do
+   for _,p in pairs(m:points()) do
       if p.x ~= p.tx or p.y ~= p.ty then
 	 gfx.line(p,{x=p.tx,y=p.ty})
       end
@@ -157,7 +157,7 @@ function process_frame(frame)
 
 --[[ Draw mesh
    gfx.setstate{color={.1,.1,.1,1}, blend='add'}
-   for e in m:edges() do
+   for e in pairs(m:edges()) do
       gfx.line(e[1],e[2])
    end
 --]]

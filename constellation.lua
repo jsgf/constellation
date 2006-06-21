@@ -1,5 +1,7 @@
 require('bokstd')
 
+show_names = false
+
 blob = gfx.texture('star-la.png')
 
 font = text.face('/usr/share/fonts/bitstream-vera/VeraBd.ttf', 12)
@@ -142,7 +144,9 @@ do
 
       local angle = math.atan2(vy, vx) * 180 / math.pi
 
-      --self:update_name(mx, my, angle)
+      if show_names then
+	 self:update_name(mx, my, angle)
+      end
    end
 
    function _const:valid_star(pt)
