@@ -37,7 +37,8 @@ end
 
 
 smokepop={}
-table.setn(smokepop, 500)	--max number of smoke particles
+--table.setn(smokepop, 500)	--max number of smoke particles
+smokepop[500] = nil
 
 -- create a smoke particle
 function smokept(x, y, intens)
@@ -237,19 +238,19 @@ function process_frame(frame)
 
    features:foreach('update')
    
-   for p in particles do
+   for p in pairs(particles) do
       p:update()
    end
 
    gfx.setstate({blend="add"})
    features:foreach('draw')
 
-   for p in render_add do
+   for p in pairs(render_add) do
       p:draw()
    end
 
    gfx.setstate({blend="alpha"})
-   for p in render_alpha do
+   for p in pairs(render_alpha) do
       p:draw()
    end
 end
