@@ -112,7 +112,7 @@ do
       local mx, my = 0, 0
       local count = 0
 
-      for _,e in self.edges do
+      for _,e in pairs(self.edges) do
 	 --[[
 	 self:valid_star(e[1])
 	 self:valid_star(e[2])
@@ -228,7 +228,7 @@ do
 
       used_names[c.name] = nil
 
-      for s,_ in c.stars do
+      for s,_ in pairs(c.stars) do
 	 assert(self.conststars[s] == c)
 	 self.conststars[s] = nil
 	 self:add_freestar(s)
@@ -241,7 +241,7 @@ do
 
       used_names[c.name] = true
 
-      for s,_ in c.stars do
+      for s,_ in pairs(c.stars) do
 	 self.conststars[s] = c
 	 self:del_freestar(s)
       end
@@ -259,7 +259,7 @@ do
    function neighbour_set(m, star)
       local ret = {}
 
-      for _,p in m:connected(star) do
+      for _,p in pairs(m:connected(star)) do
 	 -- print('  ' .. tostring(star) .. ' -> ' .. tostring(p))
 	 table.insert(ret, p)
       end
@@ -283,7 +283,7 @@ do
    function _heavens:make_constellation()
       -- Build a nicely indexable table of free stars
       local free = {}
-      for _,s in self.freestars do
+      for _,s in pairs(self.freestars) do
 	 table.insert(free, s)
       end
 
@@ -295,7 +295,7 @@ do
       -- first, create a mesh for all the stars
       local m = mesh.new()
 
-      for _,p in self.stars do
+      for _,p in pairs(self.stars) do
 	 m:add(p)
       end
 

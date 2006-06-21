@@ -5,7 +5,7 @@ features = {}
 function features:points()
    local ret = {}
 
-   for i in self do
+   for i in pairs(self) do
       if type(i) == 'number' then
 	 ret[i] = self[i]
       end
@@ -14,7 +14,7 @@ function features:points()
 end
 
 function features:foreach(func)
-   for _,p in self:points() do
+   for _,p in pairs(self:points()) do
       p[func](p)
    end
 end
@@ -42,7 +42,7 @@ function gradient(cols, temp)
 
    -- This could probably be a binary search or something, if it
    -- seemed worthwhile
-   for _,col in cols do
+   for _,col in pairs(cols) do
       local w,c = unpack(col)	--weight, colour
 
       if pw then
