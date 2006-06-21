@@ -1,7 +1,6 @@
 #ifndef _CAMERA_H
 #define _CAMERA_H
 
-#define HAVE_STDINT_H
 #include <yuv4mpeg.h>
 
 class Camera

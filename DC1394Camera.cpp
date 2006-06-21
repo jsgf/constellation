@@ -83,14 +83,14 @@ bool DC1394Camera::start()
 	}
 
 	if (device_name != NULL && 
-	    dc1394_set_dma_device_filename(camera_, device_name) != DC1394_SUCCESS) {
+	    dc1394_capture_set_dma_device_filename(camera_, device_name) != DC1394_SUCCESS) {
 		printf("can't set device name\n");
 		return false;
 	}
 
-	if (dc1394_dma_setup_capture(camera_,
-				     format_, speed, fps_, 
-				     NUM_BUFFERS, DROP_FRAMES) != DC1394_SUCCESS) {
+	if (dc1394_video_set_mode(camera_, format_) != DC1394_SUCCESS ||
+	    dc1394_video_set_iso_speed(camera_, speed) != DC1394_SUCCESS ||
+	    dc1394_capture_setup_dma(camera_, NUM_BUFFERS, DROP_FRAMES) != DC1394_SUCCESS) {
 		fprintf(stderr, "unable to setup camera- check line %d of %s to make sure\n",
 			__LINE__,__FILE__);
 		perror("that the video mode,framerate and format are supported\n");
@@ -117,8 +117,7 @@ void DC1394Camera::stop()
 	stopRecord();
 
 	if (camera_ != NULL) {
-		dc1394_dma_unlisten(camera_);
-		dc1394_dma_release_camera(camera_);
+		dc1394_capture_stop(camera_);
 		dc1394_free_camera(camera_);
 		camera_ = NULL;
 	}
@@ -137,7 +136,7 @@ const unsigned char *DC1394Camera::getFrame()
 	if (!isOK())
 		return testpattern();
 
-	failed_ = dc1394_dma_capture(&camera_, 1, DC1394_VIDEO1394_WAIT) != DC1394_SUCCESS;
+	failed_ = dc1394_capture_dma(&camera_, 1, DC1394_VIDEO1394_WAIT) != DC1394_SUCCESS;
 
 	if (!failed_) {
 		switch(format_) {
@@ -169,7 +168,7 @@ const unsigned char *DC1394Camera::getFrame()
 		default:
 			abort(); // never used
 		}
-		dc1394_dma_done_with_buffer(camera_);
+		dc1394_capture_dma_done_with_buffer(camera_);
 
 
 		if (recfd_ != -1)
