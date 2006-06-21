@@ -1164,18 +1164,30 @@ static int panic(lua_State *L)
 
 void lua_setup(const char *src)
 {
+	static const luaL_Reg lualibs[] = {
+		{"", luaopen_base},
+		{LUA_LOADLIBNAME, luaopen_package},
+		{LUA_TABLIBNAME, luaopen_table},
+		{LUA_IOLIBNAME, luaopen_io},
+		//{LUA_OSLIBNAME, luaopen_os},
+		{LUA_STRLIBNAME, luaopen_string},
+		{LUA_MATHLIBNAME, luaopen_math},
+		//{LUA_DBLIBNAME, luaopen_debug},
+		{NULL, NULL}
+	};
+	const luaL_Reg *lib = lualibs;
 	int ret;
 	lua_State *L;
 
 	L = state = lua_open();
 
 	lua_atpanic(L, panic);
-
-	luaopen_base(L);
-	luaopen_table(L);
-	luaopen_io(L);
-	luaopen_string(L);
-	luaopen_math(L);
+	
+	for (; lib->func; lib++) {
+		lua_pushcfunction(L, lib->func);
+		lua_pushstring(L, lib->name);
+		lua_call(L, 1, 0);
+	}
 
 	tracker_register(state);
 	gfx_register(state);

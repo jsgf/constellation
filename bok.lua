@@ -128,16 +128,16 @@ function process_frame(frame)
 		t.active))
    end
 
-   for p in particles do
+   for p in pairs(particles) do
       p:update()
    end
 
-   for p in particles do
+   for p in pairs(particles) do
       p:draw()
    end
 
    gfx.setstate({blend="alpha", colour={1,1,0,1}})
-   for i in features do
+   for i in pairs(features) do
       if type(i) == 'number' then
 	 features[i]:draw()
       end

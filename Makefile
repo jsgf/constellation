@@ -34,7 +34,7 @@ SDL_CFLAGS := $(shell sdl-config --cflags)
 SDL_LIBS := $(shell sdl-config --libs)
 
 LUA_CFLAGS :=
-LUA_LIBS := -llua -llualib
+LUA_LIBS := -llua
 
 PNG_CFLAGS := $(shell libpng-config --cflags)
 PNG_LIBS := $(shell libpng-config --libs)
