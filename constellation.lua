@@ -57,7 +57,7 @@ do
 
       assert(self.stars[p] ~= nil)
 
-      for _,to in self.stars[p] do
+      for _,to in pairs(self.stars[p]) do
 	 local ek = edge_key(p, to)
 
 	 -- print('  edge '..ek)
