@@ -105,7 +105,7 @@ all: bokchoi
 TESTPAT=tcf_sydney.o Indian_Head_320.o nbc-320.o
 
 bokchoi: bokchoi.o bok_lua.o bok_mesh.o bok_text.o \
-	Camera.o DC1394Camera.o \
+	Camera.o DC1394Camera.o blob.o \
 	$(KLTOBJ) $(TESTPAT)
 	$(CXX)  $(PROF) $(OPT) $(LDFLAGS) -o $@ $^ \
 		$(filter-out -L/usr/lib64,$(BOKLIBS))
@@ -118,6 +118,9 @@ bokchoi: bokchoi.o bok_lua.o bok_mesh.o bok_text.o \
 
 star.raw: star.png
 	convert star.png -resize 64x64 gray:star.raw
+
+blob.raw: blob.png
+	convert blob.png -resize 64x64 gray:blob.raw
 
 %.raw: %.jpg
 	convert -resize 320x240 $< gray:$@
