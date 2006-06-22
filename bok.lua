@@ -95,7 +95,7 @@ function trackpoint(x, y, weight)
       self.y = y
 
       if self.age > mature and math.random() < .2 then
-	 p = particle(x, y, math.random() * 4 - 2, -math.random()*3, 40)
+	 p = particle(x, y, math.random() * 4 - 2, -math.random()*3, 20)
 	 particles[p] = p
       end
 
