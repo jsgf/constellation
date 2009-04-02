@@ -10,7 +10,7 @@ for name in io.lines('names.txt') do
    table.insert(names, name)
 end
 
-track = tracker.new(50, 200)
+track = tracker.new(70, 200)
 
 -- An individual constellation
 do
