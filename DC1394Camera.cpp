@@ -13,40 +13,40 @@ DC1394Camera::DC1394Camera(framesize_t size, int rate)
 	: Camera(map[size], rate), failed_(true),
 	  camera_(NULL), buf_(NULL)
 {
+	dc1394 = dc1394_new();
 }
 
 DC1394Camera::~DC1394Camera()
 {
 	stop();
+	dc1394_free(dc1394);
 }
 
 bool DC1394Camera::start()
 {
-	dc1394camera_t **cameras = NULL;
-	unsigned ncameras;
+	dc1394camera_list_t *list;
 	char *device_name = NULL;
 	dc1394speed_t speed;
 
 	failed_ = true;
 
-	int err = dc1394_find_cameras(&cameras, &ncameras);
+	int err = dc1394_camera_enumerate(dc1394, &list);
 
 	if (err != DC1394_SUCCESS) {
 		printf("can't find cameras\n");
 		return false;
 	}
 
-	if (ncameras < 1) {
+	if (list->num == 0) {
 		printf("no cameras found\n");
 		return false;
 	}
 
-	camera_ = cameras[0];
-	for(unsigned i = 1; i < ncameras; i++)
-		dc1394_free_camera(cameras[i]);
-	free(cameras);
+	camera_ = dc1394_camera_new(dc1394, list->ids[0].guid);
 
-	dc1394_cleanup_iso_channels_and_bandwidth(camera_);
+	dc1394_camera_free_list (list);
+
+	//dc1394_cleanup_iso_channels_and_bandwidth(camera_);
 	if (dc1394_get_camera_feature_set(camera_, &features_) != DC1394_SUCCESS) {
 		printf("unable to get feature set\n");
 		return false;

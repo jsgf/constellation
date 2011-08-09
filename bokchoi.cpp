@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <sys/time.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -16,7 +17,16 @@
 #include <valgrind/valgrind.h>
 
 #include "Camera.h"
+#if USE1394
 #include "DC1394Camera.h"
+#endif
+#if USEV4L1
+#include "V4LCamera.h"
+#endif
+#if USEV4L2
+#include "V4L2Camera.h"
+#endif
+
 #include "bok_lua.h"
 
 static Camera *cam;
@@ -429,11 +439,41 @@ int main(int argc, char **argv)
 		Camera::framesize_t size = Camera::SIF;
 		int fps = 30;
 
-		cam = new DC1394Camera(size, fps);
-		if (!cam->start()) {
-			delete cam;
+		cam = NULL;
+
+#if USEV4L2
+		if (!cam) {
+			cam = new V4L2Camera(size, fps);
+			if (!cam->start()) {
+				delete cam;
+				cam = NULL;
+			}
+		}
+#endif
+
+#if USE1394
+		if (!cam) {
+			cam = new DC1394Camera(size, fps);
+
+			if (!cam->start()) {
+				delete cam;
+				cam = NULL;
+			}
+		}
+#endif
+
+#if USEV4L1
+		if (!cam) {
 			cam = new V4LCamera(size, fps);
-			cam->start(); // will use test pattern if failed
+			if (!cam->start()) {
+				delete cam;
+				cam = NULL;
+			}
+		}
+#endif
+		if (cam == NULL) {
+			printf("No camera initialized\n");
+			exit(1);
 		}
 	} 
 

@@ -45,6 +45,10 @@ GLIB_LIBS := $(shell pkg-config --libs glib-2.0)
 GTS_CFLAGS :=
 GTS_LIBS := -lgts
 
+USE1394=0
+USEV4L1=0
+USEV4L2=1
+
 ################################################################################
 ################################################################################
 
@@ -65,7 +69,11 @@ CXX:=$($(COMPILER)_CXX)
 
 OPT:=$($(COMPILER)_OPT)
 
-CPPFLAGS:= -I/usr/local/include \
+CPPFLAGS:=			\
+	 -DUSE1394=$(USE1394)	\
+	 -DUSEV4L1=$(USEV4L1)	\
+	 -DUSEV4L2=$(USEV4L2)	\
+	-I/usr/local/include \
 	-Iklt \
 	-I$(CGAL)/include -I$(CGAL)/include/CGAL/config/$(CGALPLAT) \
 	$(SDL_CFLAGS) \
@@ -98,14 +106,27 @@ BOKLIBS = \
 	$(GLIB_LIBS) \
 	$(GTS_LIBS) \
 	$(FREETYPE_LIBS) \
-	-lGLU -lGL -lz -ldc1394 -lraw1394 -lm
+	-lGLU -lGL -lz $(LIB1394) -lm
 
 all: bokchoi
 
 TESTPAT=tcf_sydney.o Indian_Head_320.o nbc-320.o
 
+ifeq ($(USE1394),1)
+OBJ1394 = DC1394Camera.o
+LIB1394 = -ldc1394 -lraw1394
+endif
+
+ifeq ($(USEV4L1),1)
+OBJV4L1 = V4LCamera.o
+endif
+
+ifeq ($(USEV4L2),1)
+OBJV4L1 = V4L2Camera.o
+endif
+
 bokchoi: bokchoi.o bok_lua.o bok_mesh.o bok_text.o \
-	Camera.o DC1394Camera.o blob.o \
+	Camera.o $(OBJ1394) $(OBJV4L1) blob.o \
 	$(KLTOBJ) $(TESTPAT)
 	$(CXX)  $(PROF) $(OPT) $(LDFLAGS) -o $@ $^ \
 		$(filter-out -L/usr/lib64,$(BOKLIBS))
