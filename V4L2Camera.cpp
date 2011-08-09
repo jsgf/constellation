@@ -288,8 +288,9 @@ const unsigned char *V4L2Camera::getFrame()
 			goto failed;
 		}
 
-		printf("got index %d frame %u\n",
-		       buffer.index, buffer.sequence);
+		if (0)
+			printf("got index %d frame %u\n",
+			       buffer.index, buffer.sequence);
 		inbuf = frameptrs_[buffer.index];
 		mmap_prev_frame_ = buffer.index;
 	} else {
