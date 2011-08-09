@@ -1,6 +1,7 @@
 require('bokstd')
 
 show_names = false
+do_flip = true
 
 blob = gfx.texture('star-la.png')
 
@@ -552,8 +553,8 @@ vault = heavens()
 dying_stars = {}
 backdrop = nil
 
-flip = Matrix()
-if true then
+if do_flip then
+   flip = Matrix(identmatrix)
    -- mirror image
    flip:translate(320,0)
    flip:scale(-1,1)
@@ -613,7 +614,11 @@ function process_frame(frame)
       end
    end
 
-   xform.load(flip, _inner)
+   if do_flip then
+      xform.load(flip, _inner)
+   else
+      _inner()
+   end
 
    -- drawmemuse(frame)
 end
