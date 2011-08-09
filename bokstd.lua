@@ -132,7 +132,7 @@ do
    local maxhist=200		--size of sample history
 
    function drawmemuse(frame) 
-      local info={ gcinfo() }
+      local info={ collectgarbage("count"), 1000 }
 
       tgtmemmax = roundup(math.max(tgtmemmax, info[2]), 100)
       memmax = memmax + (tgtmemmax-memmax) * .1
