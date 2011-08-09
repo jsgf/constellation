@@ -538,24 +538,12 @@ int main(int argc, char **argv)
 		handle_events();
 		display();
 
-		// Timing: 
-		// We want time_between_calls + sleep_here == (1/rate_)
-		// We can't control anything except sleep_here
 		static unsigned long long prev_time;
-		static long sleep_time = 1000000 / 30;
-		long want_time = 1000000 / rate;
 
 		if (prev_time != 0) {
 			unsigned long long frame_delta = get_now() - prev_time; // time since prev call
 			
-			long error = (frame_delta + sleep_time) - want_time;
-			
-			sleep_time -= error / 10;
-
-			if (sleep_time > 0)
-				usleep(sleep_time);
-			else
-				sleep_time = 0;	// clamp
+			//printf("fps = %f\n", 1. / (frame_delta / 1000000.));
 		}
 		prev_time = get_now();
 	}
