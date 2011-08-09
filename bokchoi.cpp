@@ -543,7 +543,8 @@ int main(int argc, char **argv)
 		if (prev_time != 0) {
 			unsigned long long frame_delta = get_now() - prev_time; // time since prev call
 			
-			//printf("fps = %f\n", 1. / (frame_delta / 1000000.));
+			if (0)
+				printf("fps = %f\n", 1. / (frame_delta / 1000000.));
 		}
 		prev_time = get_now();
 	}
