@@ -1,6 +1,6 @@
 
 history={}
-table.setn(history, 20)
+history[20]=nil
 
 t = tracker.new(20, 40)
 
@@ -31,9 +31,7 @@ function process_frame(frame)
 
    gfx.setstate({blend='add'})
 
-   for i in history do
-      local f = history[i]
-
+   for i,f in pairs(history) do
       if f then
 	 local b = .2 / i
 	 gfx.setstate({blend='add', colour={b, b, b}})
@@ -42,10 +40,8 @@ function process_frame(frame)
    end
 
    gfx.setstate({blend='alpha', colour={.5,.5,.2,1}})
-   for i in features do
-      if type(i) == 'number' then
-	 gfx.sprite(features[i], 24, star)
-      end
+   for _,v in ipairs(features) do
+      gfx.sprite(v, 24, star)
    end
 
    --print('gc=',gcinfo())

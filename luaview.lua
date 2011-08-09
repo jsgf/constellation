@@ -5,7 +5,7 @@ require("bokstd")
 lua = gfx.texture('lua-logo.png')
 
 history={}
-table.setn(history, 4)		--number of frames of history
+history[4]=nil			--number of frames of history
 
 function process_frame(frame)
    table.insert(history, frame)	--insert at end
