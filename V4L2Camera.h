@@ -12,8 +12,6 @@ private:
 	int	fd_;
 	int	recfd_;
 
-	unsigned char *buf_;
-
 	static const int max_buffers_ = 10;
 
 	unsigned frame_size_;	/* total size of frame */

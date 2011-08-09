@@ -11,7 +11,7 @@
 
 V4L2Camera::V4L2Camera(Camera::framesize_t size, int rate)
 	: Camera(size, rate),
-	  fd_(-1), buf_(NULL), use_mmap_(true)
+	  fd_(-1), retbuf_(NULL), use_mmap_(true)
 {
 }
 
@@ -220,7 +220,7 @@ void V4L2Camera::stop()
 	}
 
 	if (retbuf_) {
-		delete retbuf_;
+		delete[] retbuf_;
 		retbuf_ = NULL;
 	}
 }
@@ -310,7 +310,7 @@ const unsigned char *V4L2Camera::getFrame()
 	}
 
 	if (tmpbuf)
-		delete tmpbuf;
+		delete[] tmpbuf;
 
 	return outbuf;
 }
