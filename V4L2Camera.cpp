@@ -184,6 +184,11 @@ bool V4L2Camera::start()
 	fail_reqbuf:
 		use_mmap_ = false;
 
+		if (!(caps.capabilities & V4L2_CAP_READWRITE)) {
+			printf("No read/write");
+			return false;
+		}
+
 		// XXX get proper bytes/pix for format
 		frame_size_ = sizeinfo_[size_].width * sizeinfo_[size_].height * 2;
 	}
