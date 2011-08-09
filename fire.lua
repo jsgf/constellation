@@ -1,6 +1,6 @@
 require ("bokstd")
 
-maxpoints=50
+maxpoints=20
 t = tracker.new(maxpoints/2, maxpoints)
 
 -- particles which need per-frame update
@@ -25,7 +25,6 @@ function del_particle(p)
    render_alpha[p] = nil
 end
 
-star = gfx.texture('star-la.png')
 blob = gfx.texture('blob.png')
 smoke = gfx.texture('smoke.png')
 
