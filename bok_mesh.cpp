@@ -992,6 +992,8 @@ static int mesh_draw(lua_State *L)
 	GLubyte *cols;
 	GLfloat col[4];
 
+	GLERR();
+	
 	luaL_argcheck(L, mesh != NULL, 1, "'mesh' expected");
 	if (lua_gettop(L) >= 2)
 		luaL_argcheck(L, tex != NULL, 2, "'texture' expected");
@@ -1019,6 +1021,8 @@ static int mesh_draw(lua_State *L)
 
 	render_indexed_mesh(tex, mds.nvert, coords, texcoords, mds.ncols > 0 ? cols : NULL,
 			    mds.nprim, prims);
+
+	GLERR();
 
 	delete[] coords;
 	delete[] texcoords;

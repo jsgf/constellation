@@ -55,4 +55,7 @@ void render_indexed_mesh(struct texture *tex,
 			 float *coords, float *texcoords, GLubyte *cols,
 			 int nprims, GLushort *prims);
 
+#define GLERR() _glerr(__FILE__, __LINE__);
+extern void _glerr(const char *file, int line);
+
 #endif // BOK_LUA_H

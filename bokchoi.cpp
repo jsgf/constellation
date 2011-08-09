@@ -312,6 +312,8 @@ static void display(void)
 	static const unsigned char *img;
 	static unsigned int img_w, img_h;
 
+	GLERR();
+
 	if (!paused || img == NULL) {
 		img = cam->getFrame();
 		img_w = cam->imageWidth();
@@ -321,7 +323,11 @@ static void display(void)
 	glClearColor(.2, .2, .2, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
 	
+	GLERR();
+
 	lua_frame(img, img_w, img_h);
+
+	GLERR();
 
 	if (cam->isrecording()) {
 		glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT |
@@ -363,6 +369,8 @@ static void display(void)
 		glPopMatrix();
 		glPopAttrib();
 	}
+
+	GLERR();
 
 	SDL_GL_SwapBuffers();
 }

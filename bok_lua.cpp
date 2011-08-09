@@ -41,12 +41,11 @@ extern "C" {
 
 static lua_State *state;
 
-#define GLERR() _glerr(__FILE__, __LINE__);
-
-static void _glerr(const char *file, int line)
+void _glerr(const char *file, int line)
 {
 	GLenum err = glGetError();
 
+	fflush(stderr);
 	if (err != GL_NO_ERROR) {
 		printf("GL error at %s:%d: %s\n",
 		       file, line, (char *)gluErrorString(err));
@@ -349,6 +348,39 @@ static int tracker_register(lua_State *L)
    Graphics interface
    ---------------------------------------------------------------------- */
 
+static struct texture_list *pending_delete;
+struct texture_list
+{
+	struct texture_list *next;
+	GLuint texid;
+
+	texture_list(GLuint id)
+		:texid(id)
+		{}
+
+	void addlist(struct texture_list **list) {
+		next = *list;
+		*list = this;
+	}
+};
+
+static void add_pending_delete(GLuint texid)
+{
+	struct texture_list *e = new texture_list(texid);
+	e->addlist(&pending_delete);
+}
+
+static void delete_pending(void)
+{
+	for (texture_list *p = pending_delete, *n; p != NULL; p = n) {
+		n = p->next;
+		glDeleteTextures(1, &p->texid);
+		delete p;
+	}
+
+	pending_delete = NULL;
+}
+
 struct texture *texture_init(struct texture *tex,
 			     GLenum target, int width, int height, GLenum format)
 {
@@ -455,6 +487,8 @@ static int texture_new_frame(lua_State *L,
 			     GLenum fmt)
 {
 	struct texture *tex;
+
+	GLERR();
 
 	tex = texture_alloc(L, GL_TEXTURE_2D, width, height, fmt);
 
@@ -674,7 +708,7 @@ int texture_gc(lua_State *L)
 
 	tex = texture_get(L, 1);
 
-	glDeleteTextures(1, &tex->texid);
+	add_pending_delete(tex->texid);
 
 	return 0;
 }
@@ -700,11 +734,11 @@ static int gfx_line(lua_State *L)
 
 		if (!get_xy(L, pt, &x, &y))
 			continue;
-
 		glVertex2f(x, y);
 	}
 
 	glEnd();
+	GLERR();
 
 	return 0;
 }
@@ -1248,11 +1282,16 @@ void lua_frame(const unsigned char *img, int img_w, int img_h)
 	::img = (unsigned char *)img;
 	::img_w = img_w;
 	::img_h = img_h;
+
+	GLERR();
 	texture_new_frame(state, img, img_w, img_h, GL_LUMINANCE);
 	//printf(">>> %d\n", lua_gettop(state));
 	call_lua(state, 0, LUA_GLOBALSINDEX, "process_frame", "I", -1);
 	lua_pop(state, 1);	// pop frame
 	//printf("<<< %d\n", lua_gettop(state));
+
+	GLERR();
+	delete_pending();	// delete any textures which got gc-ed
 }
 
 bool vcall_lua(lua_State *L, int nret, int tblidx, const char *name, const char *args, va_list ap)

@@ -189,7 +189,7 @@ static struct glyph *glyph_cache(struct face *face, unsigned char ch)
 	
 	g->tw = (float)g->w / tw;
 	g->th = (float)g->h / th;
-		
+
 	glBindTexture(GL_TEXTURE_2D, g->texid);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_INTENSITY, tw, th, 0, 
 		     GL_LUMINANCE, GL_UNSIGNED_BYTE,
