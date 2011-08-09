@@ -40,8 +40,10 @@ function process_frame(frame)
    end
 
    gfx.setstate({blend='alpha', colour={.5,.5,.2,1}})
-   for _,v in ipairs(features) do
-      gfx.sprite(v, 24, star)
+   for i,v in pairs(features) do
+       if type(i) == "number" then
+       	  gfx.sprite(v, 24, star)
+       end
    end
 
    --print('gc=',gcinfo())
