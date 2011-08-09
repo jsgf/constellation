@@ -61,7 +61,7 @@ end
 
 width=320
 height=240
-step=5
+step=15
 across = math.floor(width/step)
 down = math.floor(height/step)
 
@@ -133,7 +133,7 @@ function process_frame(frame)
       end
 
       m:effect(p, magnify, 50)
-      --m:effect(p, twist, 50)
+      m:effect(p, twist, 50)
    end
 
    gfx.setstate{color={1,1,1,1}, blend='none'}
@@ -146,7 +146,7 @@ function process_frame(frame)
    end
 --]]
 
---[[ Draw vectors
+-- [[ Draw vectors
    gfx.setstate{color={.5,.5,0,.5}, blend='alpha'}
    for _,p in pairs(m:points()) do
       if p.x ~= p.tx or p.y ~= p.ty then
@@ -155,7 +155,7 @@ function process_frame(frame)
    end
 --]]
 
---[[ Draw mesh
+-- [[ Draw mesh
    gfx.setstate{color={.1,.1,.1,1}, blend='add'}
    for e in pairs(m:edges()) do
       gfx.line(e[1],e[2])
