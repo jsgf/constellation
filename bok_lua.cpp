@@ -21,12 +21,14 @@ extern "C" {
 #include "bok_mesh.h"
 #include "bok_text.h"
 
+#ifndef GL_TEXTURE_RECTANGLE
 #if GL_EXT_texture_rectangle
 #define GL_TEXTURE_RECTANGLE GL_TEXTURE_RECTANGLE_EXT
 #elif GL_ARB_texture_rectangle
 #define GL_TEXTURE_RECTANGLE GL_TEXTURE_RECTANGLE_ARB
 #else
 #define GL_TEXTURE_RECTANGLE 0
+#endif
 #endif
 
 #ifndef GL_GENERATE_MIPMAP
