@@ -1,6 +1,6 @@
 require('bokstd')
 
-show_names = false
+show_names = true
 do_flip = true
 
 blob = gfx.texture('star-la.png')
