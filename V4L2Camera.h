@@ -12,7 +12,7 @@ private:
 	int	fd_;
 	int	recfd_;
 
-	static const int max_buffers_ = 10;
+	static const int max_buffers_ = 5;
 
 	unsigned frame_size_;	/* total size of frame */
 
