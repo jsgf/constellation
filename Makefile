@@ -160,6 +160,9 @@ testpat.o: nbc-320.raw Indian_Head_320.raw tcf_sydney.raw
 
 
 clean:
-	rm -f *.o klt/*.o .deps/*.d
+	rm -f *.o klt/*.o .deps/*.d *~
 
 -include .deps/*.d
+
+cscope:
+	cscope -R -b $(filter-out -D%,$(CPPFLAGS))
